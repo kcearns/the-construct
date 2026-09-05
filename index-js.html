@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>THE CONSTRUCT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--g:#00ff41;--gd:#00a32a;--r:#ff3b3b;--bg:#000}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:'Share Tech Mono',ui-monospace,monospace;color:var(--g);user-select:none}
+  canvas{display:block}
+
+  /* CRT overlay */
+  #crt{position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.75) 100%)}
+  #flash{position:fixed;inset:0;pointer-events:none;z-index:6;background:radial-gradient(ellipse at center,transparent 40%,rgba(255,40,40,.7));opacity:0}
+
+  /* HUD */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10;opacity:0;transition:opacity .4s}
+  #hud.on{opacity:1}
+  .cross{position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%)}
+  .cross i{position:absolute;background:var(--g);box-shadow:0 0 6px var(--g);transition:transform .08s}
+  .cross i:nth-child(1){left:12px;top:0;width:2px;height:8px}
+  .cross i:nth-child(2){left:12px;bottom:0;width:2px;height:8px}
+  .cross i:nth-child(3){top:12px;left:0;height:2px;width:8px}
+  .cross i:nth-child(4){top:12px;right:0;height:2px;width:8px}
+  .cross.kick i:nth-child(1){transform:translateY(-5px)}.cross.kick i:nth-child(2){transform:translateY(5px)}
+  .cross.kick i:nth-child(3){transform:translateX(-5px)}.cross.kick i:nth-child(4){transform:translateX(5px)}
+  #hit{position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%) rotate(45deg);opacity:0}
+  #hit i{position:absolute;background:#fff;width:2px;height:10px}
+  #hit i:nth-child(1){left:16px;top:0}#hit i:nth-child(2){left:16px;bottom:0}
+  #hit i:nth-child(3){top:16px;left:0;width:10px;height:2px}#hit i:nth-child(4){top:16px;right:0;width:10px;height:2px}
+  #hit.show{animation:hm .25s ease-out}
+  @keyframes hm{0%{opacity:1;transform:translate(-50%,-50%) rotate(45deg) scale(1.4)}100%{opacity:0;transform:translate(-50%,-50%) rotate(45deg) scale(1)}}
+
+  .panel{position:absolute;padding:14px 18px;border:1px solid rgba(0,255,65,.35);background:rgba(0,10,3,.55);backdrop-filter:blur(3px);
+    letter-spacing:.08em;text-shadow:0 0 8px rgba(0,255,65,.6);font-size:14px}
+  .panel::before,.panel::after{content:'';position:absolute;width:10px;height:10px;border:1px solid var(--g)}
+  .panel::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+  .panel::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+  #vitals{left:28px;bottom:28px;min-width:260px}
+  #vitals .lbl{font-size:11px;opacity:.7;margin-bottom:6px}
+  #bar{height:8px;background:rgba(0,255,65,.12);border:1px solid rgba(0,255,65,.4);position:relative;overflow:hidden}
+  #bar b{display:block;height:100%;width:100%;background:var(--g);box-shadow:0 0 10px var(--g);transition:width .15s,background .3s}
+  #bar b.low{background:var(--r);box-shadow:0 0 10px var(--r)}
+  #hpnum{margin-top:6px;font-size:20px}
+  #stats{right:28px;top:28px;text-align:right;min-width:200px;line-height:1.7}
+  #stats .big{font-size:26px}
+  #wave{left:50%;top:60px;transform:translateX(-50%);font-size:22px;padding:8px 26px;opacity:0;transition:opacity .4s;text-align:center}
+  #wave.on{opacity:1}
+  #msg{left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;padding:26px 40px;display:none}
+  #msg.on{display:block}
+  #msg h2{margin:0 0 8px;font-size:34px;letter-spacing:.2em;color:var(--r);text-shadow:0 0 12px var(--r)}
+  #msg p{margin:6px 0;opacity:.85}
+
+  /* Menu */
+  #menu{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+    background:radial-gradient(ellipse at center,rgba(0,30,8,.85),rgba(0,0,0,.95));cursor:pointer;transition:opacity .5s}
+  #menu.off{opacity:0;pointer-events:none}
+  #menu h1{margin:0;font-size:clamp(40px,8vw,88px);letter-spacing:.3em;font-weight:400;text-shadow:0 0 20px var(--g),0 0 60px rgba(0,255,65,.4);animation:flk 4s infinite}
+  @keyframes flk{0%,92%,100%{opacity:1}93%{opacity:.5}95%{opacity:1}97%{opacity:.6}}
+  #menu .sub{font-size:14px;letter-spacing:.35em;opacity:.7}
+  #menu .keys{display:grid;grid-template-columns:auto auto;gap:6px 22px;font-size:13px;opacity:.85;margin-top:8px}
+  #menu .keys span:nth-child(odd){text-align:right;opacity:.6}
+  #menu .cta{margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 18px rgba(0,255,65,.6);background:rgba(0,255,65,.08)}}
+</style>
+</head>
+<body>
+<div id="crt"></div><div id="vig"></div><div id="flash"></div>
+
+<div id="hud">
+  <div class="cross" id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="hit"><i></i><i></i><i></i><i></i></div>
+  <div class="panel" id="vitals">
+    <div class="lbl">INTEGRITY</div>
+    <div id="bar"><b id="hpbar"></b></div>
+    <div id="hpnum">100</div>
+  </div>
+  <div class="panel" id="stats">
+    <div>AGENTS TERMINATED</div><div class="big" id="kills">0</div>
+    <div style="opacity:.7;font-size:12px" id="active">ACTIVE 0</div>
+  </div>
+  <div class="panel" id="wave">WAVE 1</div>
+  <div class="panel" id="msg"><h2>SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
+</div>
+
+<div id="menu">
+  <h1>THE CONSTRUCT</h1>
+  <div class="sub">LOADING PROGRAM // FPS DEMO // THREE.JS</div>
+  <div class="keys">
+    <span>ARROWS / WASD</span><span>move</span>
+    <span>MOUSE</span><span>look</span>
+    <span>CLICK</span><span>fire</span>
+    <span>SHIFT</span><span>sprint</span>
+  </div>
+  <div class="cta">CLICK TO JACK IN</div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+const G = 0x00ff41, R = 0xff3b3b;
+const WORLD = 300;
+
+// ---------- Renderer / scene ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.FogExp2(0x000000, 0.018);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 400);
+camera.position.set(0, 1.7, 0);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.5, 0.15);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- World ----------
+// Floor: reflective dark plane + grid
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x020402, roughness: 0.25, metalness: 0.8 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(WORLD*2, WORLD*2), floorMat);
+floor.rotation.x = -Math.PI/2; scene.add(floor);
+const grid = new THREE.GridHelper(WORLD*2, WORLD, G, 0x00551a);
+grid.material.transparent = true; grid.material.opacity = 0.45; grid.position.y = 0.01; scene.add(grid);
+
+scene.add(new THREE.AmbientLight(0x0a2a10, 1.5));
+const keyLight = new THREE.PointLight(G, 40, 60, 1.5); keyLight.position.set(0, 12, 0); scene.add(keyLight);
+
+// City: instanced solid blocks + edge lines (cleaner than wireframe triangles)
+const colliders = [];
+const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+const blockMat = new THREE.MeshStandardMaterial({ color: 0x010a03, roughness: 0.6, metalness: 0.4, emissive: 0x002208, emissiveIntensity: 0.6 });
+const N = 140;
+const blocks = new THREE.InstancedMesh(blockGeo, blockMat, N);
+const edgeGeo = new THREE.EdgesGeometry(blockGeo);
+const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), sz = new THREE.Vector3(), ps = new THREE.Vector3();
+let placed = 0;
+const edgeMat = new THREE.LineBasicMaterial({ color: G, transparent: true, opacity: 0.5 });
+while (placed < N) {
+  const w = 3 + Math.random()*7, h = 4 + Math.pow(Math.random(), 2)*40, d = 3 + Math.random()*7;
+  const x = (Math.random()-0.5)*WORLD, z = (Math.random()-0.5)*WORLD;
+  if (Math.hypot(x, z) < 14) continue;
+  ps.set(x, h/2, z); sz.set(w, h, d);
+  blocks.setMatrixAt(placed, m4.compose(ps, q0, sz));
+  const e = new THREE.LineSegments(edgeGeo, edgeMat); e.position.copy(ps); e.scale.copy(sz); scene.add(e);
+  colliders.push(new THREE.Box3().setFromCenterAndSize(ps.clone(), sz.clone()));
+  placed++;
+}
+blocks.instanceMatrix.needsUpdate = true; scene.add(blocks);
+
+// Digital rain
+const glyphs = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789Z';
+const rainTex = (() => {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 1024;
+  const g = c.getContext('2d'); g.font = 'bold 40px monospace'; g.textAlign = 'center';
+  for (let i = 0; i < 24; i++) {
+    g.fillStyle = i === 0 ? '#e8ffe8' : `rgba(0,255,65,${Math.max(0.05, 1 - i/22)})`;
+    g.fillText(glyphs[Math.random()*glyphs.length|0], 32, 42 + i*41);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const rain = [];
+const rainMat = new THREE.SpriteMaterial({ map: rainTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+for (let i = 0; i < 500; i++) {
+  const s = new THREE.Sprite(rainMat);
+  s.scale.set(0.9, 14, 1);
+  s.position.set((Math.random()-0.5)*WORLD, Math.random()*70, (Math.random()-0.5)*WORLD);
+  s.userData.v = 6 + Math.random()*14;
+  scene.add(s); rain.push(s);
+}
+
+// ---------- Weapon viewmodel ----------
+const gun = new THREE.Group();
+const gunMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.4, metalness: 0.9 });
+const gunEdge = new THREE.LineBasicMaterial({ color: G, transparent: true, opacity: 0.8 });
+function part(w, h, d, x, y, z) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const m = new THREE.Mesh(g, gunMat); m.position.set(x, y, z);
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), gunEdge); e.position.set(x, y, z);
+  gun.add(m, e);
+}
+part(0.08, 0.10, 0.55, 0, 0, -0.1);      // body
+part(0.05, 0.05, 0.35, 0, 0.02, -0.55);  // barrel
+part(0.07, 0.22, 0.10, 0, -0.15, 0.1);   // grip
+const muzzle = new THREE.PointLight(0xffffff, 0, 6); muzzle.position.set(0, 0.02, -0.75); gun.add(muzzle);
+const muzzleFlash = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }));
+muzzleFlash.scale.setScalar(0.25); muzzleFlash.position.copy(muzzle.position); gun.add(muzzleFlash);
+const GUN_REST = new THREE.Vector3(0.28, -0.26, -0.5);
+gun.position.copy(GUN_REST);
+camera.add(gun); scene.add(camera);
+
+// ---------- Enemies ----------
+const enemies = [];
+const eBody = new THREE.CapsuleGeometry(0.45, 1.1, 6, 12);
+const eHead = new THREE.SphereGeometry(0.28, 12, 12);
+const eMat = new THREE.MeshStandardMaterial({ color: 0x1a0000, emissive: R, emissiveIntensity: 0.4, roughness: 0.3, metalness: 0.7 });
+const eEdge = new THREE.LineBasicMaterial({ color: R, transparent: true, opacity: 0.9 });
+function spawnEnemy() {
+  const a = Math.random()*Math.PI*2, r = 28 + Math.random()*30;
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(eBody, eMat.clone()); b.position.y = 1.05;
+  const be = new THREE.LineSegments(new THREE.EdgesGeometry(eBody, 25), eEdge); be.position.y = 1.05;
+  const h = new THREE.Mesh(eHead, b.material); h.position.y = 2.05;
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.05), new THREE.MeshBasicMaterial({ color: 0xffffff })); eye.position.set(0, 2.08, 0.25);
+  g.add(b, be, h, eye);
+  g.position.set(camera.position.x + Math.cos(a)*r, 0, camera.position.z + Math.sin(a)*r);
+  g.userData = { hp: 2, mat: b.material, hitT: 0, speed: 3.5 + wave*0.35 + Math.random() };
+  scene.add(g); enemies.push(g);
+}
+
+// Death particles
+const particles = [];
+const pGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+const pMat = new THREE.MeshBasicMaterial({ color: R });
+function burst(pos) {
+  for (let i = 0; i < 24; i++) {
+    const p = new THREE.Mesh(pGeo, pMat);
+    p.position.copy(pos).add(new THREE.Vector3((Math.random()-.5), Math.random()*1.5, (Math.random()-.5)));
+    p.userData.v = new THREE.Vector3((Math.random()-.5)*8, Math.random()*8, (Math.random()-.5)*8);
+    p.userData.life = 0.9;
+    scene.add(p); particles.push(p);
+  }
+}
+
+// ---------- Controls / state ----------
+const controls = new PointerLockControls(camera, document.body);
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true; if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); });
+addEventListener('keyup', e => keys[e.code] = false);
+
+let hp = 100, kills = 0, wave = 1, waveKills = 0, alive = true, recoil = 0, lastShot = 0, shake = 0;
+const menu = $('menu'), hud = $('hud'), msg = $('msg'), cross = $('cross'), hit = $('hit'), flash = $('flash'), waveEl = $('wave');
+
+function reset() {
+  for (const e of enemies) scene.remove(e); enemies.length = 0;
+  for (const p of particles) scene.remove(p); particles.length = 0;
+  hp = 100; kills = 0; wave = 1; waveKills = 0; alive = true;
+  camera.position.set(0, 1.7, 0); camera.rotation.set(0, 0, 0);
+  for (let i = 0; i < 6; i++) spawnEnemy();
+  msg.classList.remove('on'); announceWave();
+}
+function announceWave() {
+  waveEl.textContent = `WAVE ${wave}`; waveEl.classList.add('on');
+  setTimeout(() => waveEl.classList.remove('on'), 2200);
+}
+
+menu.addEventListener('click', () => controls.lock());
+controls.addEventListener('lock', () => { menu.classList.add('off'); hud.classList.add('on'); if (!alive) reset(); });
+controls.addEventListener('unlock', () => { menu.classList.remove('off'); });
+reset();
+
+// ---------- Shooting ----------
+const raycaster = new THREE.Raycaster();
+const tracers = [];
+const tracerMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+addEventListener('mousedown', e => {
+  if (!controls.isLocked || !alive || e.button !== 0) return;
+  const now = performance.now(); if (now - lastShot < 110) return; lastShot = now;
+  recoil = 1; shake = 0.4;
+  cross.classList.add('kick'); setTimeout(() => cross.classList.remove('kick'), 80);
+  muzzle.intensity = 30; muzzleFlash.material.opacity = 1; muzzleFlash.material.rotation = Math.random()*6;
+
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const hits = raycaster.intersectObjects(enemies, true);
+  const end = hits.length ? hits[0].point : raycaster.ray.at(120, new THREE.Vector3());
+  const from = gun.localToWorld(muzzle.position.clone());
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, end]), tracerMat.clone());
+  scene.add(line); tracers.push(line);
+
+  if (hits.length) {
+    let g = hits[0].object; while (g.parent && !enemies.includes(g)) g = g.parent;
+    const u = g.userData; u.hitT = 0.15;
+    hit.classList.remove('show'); void hit.offsetWidth; hit.classList.add('show');
+    if (--u.hp <= 0) {
+      burst(g.position.clone().add(new THREE.Vector3(0, 1, 0)));
+      scene.remove(g); enemies.splice(enemies.indexOf(g), 1);
+      kills++; waveKills++;
+      spawnEnemy();
+      if (waveKills >= 5 + wave*2) { wave++; waveKills = 0; spawnEnemy(); spawnEnemy(); announceWave(); }
+    }
+  }
+});
+
+// ---------- Loop ----------
+const clock = new THREE.Clock();
+const dir = new THREE.Vector3(), pBox = new THREE.Box3(), pSize = new THREE.Vector3(0.7, 1.7, 0.7), tmp = new THREE.Vector3();
+let bob = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+
+  // movement
+  let moving = 0;
+  if (controls.isLocked && alive) {
+    const k = c => keys[c] ? 1 : 0;
+    const sprint = keys.ShiftLeft || keys.ShiftRight;
+    dir.set(k('ArrowRight')+k('KeyD')-k('ArrowLeft')-k('KeyA'), 0, k('ArrowUp')+k('KeyW')-k('ArrowDown')-k('KeyS'));
+    moving = dir.length(); if (moving) dir.normalize();
+    const speed = sprint ? 16 : 8;
+    // move on each axis separately for wall sliding
+    const step = (fn, amt) => { const prev = camera.position.clone(); fn(amt);
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -WORLD/2, WORLD/2);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -WORLD/2, WORLD/2);
+      pBox.setFromCenterAndSize(camera.position, pSize);
+      if (colliders.some(b => b.intersectsBox(pBox))) camera.position.copy(prev); };
+    step(a => controls.moveRight(a), dir.x*speed*dt);
+    step(a => controls.moveForward(a), dir.z*speed*dt);
+    bob += dt * (sprint ? 14 : 9) * moving;
+    camera.position.y = 1.7 + Math.sin(bob)*0.035*moving;
+  }
+
+  // weapon sway / recoil / flash
+  recoil = Math.max(0, recoil - dt*10);
+  shake = Math.max(0, shake - dt*4);
+  gun.position.set(
+    GUN_REST.x + Math.sin(bob*0.5)*0.012*moving,
+    GUN_REST.y + Math.abs(Math.cos(bob*0.5))*0.012*moving - recoil*0.02,
+    GUN_REST.z + recoil*0.08);
+  gun.rotation.x = recoil*0.25;
+  gun.rotation.z = (Math.random()-0.5)*shake*0.06;
+  muzzle.intensity *= Math.pow(0.001, dt);
+  muzzleFlash.material.opacity = Math.max(0, muzzleFlash.material.opacity - dt*14);
+
+  // rain
+  for (const s of rain) { s.position.y -= s.userData.v*dt; if (s.position.y < -10) s.position.y = 70; }
+
+  // enemies
+  let touching = false;
+  for (const e of enemies) {
+    const u = e.userData;
+    tmp.copy(camera.position).sub(e.position); tmp.y = 0;
+    const d = tmp.length();
+    e.lookAt(camera.position.x, 0, camera.position.z);
+    if (d > 1.6) e.position.addScaledVector(tmp.normalize(), u.speed*dt);
+    else touching = true;
+    e.position.y = Math.sin(t*5 + e.id)*0.06;
+    u.hitT = Math.max(0, u.hitT - dt);
+    u.mat.emissiveIntensity = u.hitT > 0 ? 3 : 0.4 + Math.sin(t*4 + e.id)*0.15;
+  }
+  if (touching && alive) { hp -= 22*dt; flash.style.opacity = 1; }
+  flash.style.opacity = Math.max(0, parseFloat(flash.style.opacity || 0) - dt*2.5);
+  if (hp <= 0 && alive) { hp = 0; alive = false; $('final').textContent = `AGENTS TERMINATED: ${kills}  //  REACHED WAVE ${wave}`; msg.classList.add('on'); controls.unlock(); }
+
+  // particles
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i], v = p.userData.v;
+    v.y -= 18*dt; p.position.addScaledVector(v, dt); p.rotation.x += dt*6; p.rotation.y += dt*4;
+    if (p.position.y < 0) { p.position.y = 0; v.y *= -0.4; v.x *= 0.7; v.z *= 0.7; }
+    if ((p.userData.life -= dt) <= 0) { scene.remove(p); particles.splice(i, 1); }
+  }
+  // tracers
+  for (let i = tracers.length-1; i >= 0; i--) {
+    tracers[i].material.opacity -= dt*10;
+    if (tracers[i].material.opacity <= 0) { scene.remove(tracers[i]); tracers.splice(i, 1); }
+  }
+
+  // hud
+  $('hpbar').style.width = hp + '%';
+  $('hpbar').classList.toggle('low', hp < 30);
+  $('hpnum').textContent = Math.ceil(hp);
+  $('kills').textContent = String(kills).padStart(3, '0');
+  $('active').textContent = `ACTIVE ${enemies.length}  //  WAVE ${wave}`;
+
+  keyLight.position.set(camera.position.x, 12, camera.position.z);
+  composer.render();
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

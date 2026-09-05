@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>THE CONSTRUCT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--g:#00ff41;--gd:#00a32a;--r:#ff3b3b;--bg:#000}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:'Share Tech Mono',ui-monospace,monospace;color:var(--g);user-select:none}
+  canvas{display:block}
+
+  /* CRT overlay */
+  #crt{position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.75) 100%)}
+  #flash{position:fixed;inset:0;pointer-events:none;z-index:6;background:radial-gradient(ellipse at center,transparent 40%,rgba(255,40,40,.7));opacity:0}
+
+  /* HUD */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10;opacity:0;transition:opacity .4s}
+  #hud.on{opacity:1}
+  .cross{position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%)}
+  .cross i{position:absolute;background:var(--g);box-shadow:0 0 6px var(--g);transition:transform .08s}
+  .cross i:nth-child(1){left:12px;top:0;width:2px;height:8px}
+  .cross i:nth-child(2){left:12px;bottom:0;width:2px;height:8px}
+  .cross i:nth-child(3){top:12px;left:0;height:2px;width:8px}
+  .cross i:nth-child(4){top:12px;right:0;height:2px;width:8px}
+  .cross.kick i:nth-child(1){transform:translateY(-5px)}.cross.kick i:nth-child(2){transform:translateY(5px)}
+  .cross.kick i:nth-child(3){transform:translateX(-5px)}.cross.kick i:nth-child(4){transform:translateX(5px)}
+  #hit{position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%) rotate(45deg);opacity:0}
+  #hit i{position:absolute;background:#fff;width:2px;height:10px}
+  #hit i:nth-child(1){left:16px;top:0}#hit i:nth-child(2){left:16px;bottom:0}
+  #hit i:nth-child(3){top:16px;left:0;width:10px;height:2px}#hit i:nth-child(4){top:16px;right:0;width:10px;height:2px}
+  #hit.show{animation:hm .25s ease-out}
+  @keyframes hm{0%{opacity:1;transform:translate(-50%,-50%) rotate(45deg) scale(1.4)}100%{opacity:0;transform:translate(-50%,-50%) rotate(45deg) scale(1)}}
+
+  .panel{position:absolute;padding:14px 18px;border:1px solid rgba(0,255,65,.35);background:rgba(0,10,3,.55);backdrop-filter:blur(3px);
+    letter-spacing:.08em;text-shadow:0 0 8px rgba(0,255,65,.6);font-size:14px}
+  .panel::before,.panel::after{content:'';position:absolute;width:10px;height:10px;border:1px solid var(--g)}
+  .panel::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+  .panel::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+  #vitals{left:28px;bottom:28px;min-width:260px}
+  #vitals .lbl{font-size:11px;opacity:.7;margin-bottom:6px}
+  #bar{height:8px;background:rgba(0,255,65,.12);border:1px solid rgba(0,255,65,.4);position:relative;overflow:hidden}
+  #bar b{display:block;height:100%;width:100%;background:var(--g);box-shadow:0 0 10px var(--g);transition:width .15s,background .3s}
+  #bar b.low{background:var(--r);box-shadow:0 0 10px var(--r)}
+  #hpnum{margin-top:6px;font-size:20px}
+  #stats{right:28px;top:28px;text-align:right;min-width:200px;line-height:1.7}
+  #stats .big{font-size:26px}
+  #wave{left:50%;top:60px;transform:translateX(-50%);font-size:22px;padding:8px 26px;opacity:0;transition:opacity .4s;text-align:center}
+  #wave.on{opacity:1}
+  #msg{left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;padding:26px 40px;display:none}
+  #msg.on{display:block}
+  #msg h2{margin:0 0 8px;font-size:34px;letter-spacing:.2em;color:var(--r);text-shadow:0 0 12px var(--r)}
+  #msg p{margin:6px 0;opacity:.85}
+
+  /* Menu */
+  #menu{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+    background:radial-gradient(ellipse at center,rgba(0,30,8,.85),rgba(0,0,0,.95));cursor:pointer;transition:opacity .5s}
+  #menu.off{opacity:0;pointer-events:none}
+  #menu h1{margin:0;font-size:clamp(40px,8vw,88px);letter-spacing:.3em;font-weight:400;text-shadow:0 0 20px var(--g),0 0 60px rgba(0,255,65,.4);animation:flk 4s infinite}
+  @keyframes flk{0%,92%,100%{opacity:1}93%{opacity:.5}95%{opacity:1}97%{opacity:.6}}
+  #menu .sub{font-size:14px;letter-spacing:.35em;opacity:.7}
+  #menu .keys{display:grid;grid-template-columns:auto auto;gap:6px 22px;font-size:13px;opacity:.85;margin-top:8px}
+  #menu .keys span:nth-child(odd){text-align:right;opacity:.6}
+  #menu .cta{margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 18px rgba(0,255,65,.6);background:rgba(0,255,65,.08)}}
+</style>
+</head>
+<body>
+<div id="crt"></div><div id="vig"></div><div id="flash"></div>
+
+<div id="hud">
+  <div class="cross" id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="hit"><i></i><i></i><i></i><i></i></div>
+  <div class="panel" id="vitals">
+    <div class="lbl">INTEGRITY</div>
+    <div id="bar"><b id="hpbar"></b></div>
+    <div id="hpnum">100</div>
+  </div>
+  <div class="panel" id="stats">
+    <div>AGENTS TERMINATED</div><div class="big" id="kills">0</div>
+    <div style="opacity:.7;font-size:12px" id="active">ACTIVE 0</div>
+  </div>
+  <div class="panel" id="wave">WAVE 1</div>
+  <div class="panel" id="msg"><h2>SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
+</div>
+
+<div id="menu">
+  <h1>THE CONSTRUCT</h1>
+  <div class="sub">LOADING PROGRAM // RUST + WASM CORE // THREE.JS RENDERER</div>
+  <div class="keys">
+    <span>ARROWS / WASD</span><span>move</span>
+    <span>MOUSE</span><span>look</span>
+    <span>CLICK</span><span>fire</span>
+    <span>SHIFT</span><span>sprint</span>
+  </div>
+  <div class="cta" id="cta">COMPILING CORE…</div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+// Thin renderer. All game state lives in the Rust/WASM core (core/src/lib.rs);
+// this file reads its flat f32 buffers each frame and draws them with three.js.
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import init, { Game } from './pkg/matrix_core.js';
+
+const $ = id => document.getElementById(id);
+const G = 0x00ff41, R = 0xff3b3b;
+
+// ---------- WASM core ----------
+const wasm = await init();
+const game = new Game((Math.random() * 0xffffffff) >>> 0);
+const WORLD = game.world_size();
+// Views are rebuilt each frame: WASM memory can grow and detach old buffers.
+const f32 = (ptr, len) => new Float32Array(wasm.memory.buffer, ptr, len);
+const EV = { WAVE: 1, HIT: 2, KILL: 4, DEATH: 8, DAMAGE: 16 };
+$('cta').textContent = 'CLICK TO JACK IN';
+
+// ---------- Renderer / scene ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+scene.fog = new THREE.FogExp2(0x000000, 0.018);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 400);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.prepend(renderer.domElement);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.5, 0.15));
+composer.addPass(new OutputPass());
+
+// ---------- World (geometry from the core) ----------
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(WORLD*2, WORLD*2),
+  new THREE.MeshStandardMaterial({ color: 0x020402, roughness: 0.25, metalness: 0.8 }));
+floor.rotation.x = -Math.PI/2; scene.add(floor);
+const grid = new THREE.GridHelper(WORLD*2, WORLD, G, 0x00551a);
+grid.material.transparent = true; grid.material.opacity = 0.45; grid.position.y = 0.01; scene.add(grid);
+scene.add(new THREE.AmbientLight(0x0a2a10, 1.5));
+const keyLight = new THREE.PointLight(G, 40, 60, 1.5); scene.add(keyLight);
+
+{
+  const buf = f32(game.blocks_ptr(), game.blocks_len());
+  const n = buf.length / 6;
+  const geo = new THREE.BoxGeometry(1, 1, 1), edgeGeo = new THREE.EdgesGeometry(geo);
+  const blocks = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({
+    color: 0x010a03, roughness: 0.6, metalness: 0.4, emissive: 0x002208, emissiveIntensity: 0.6 }), n);
+  const edgeMat = new THREE.LineBasicMaterial({ color: G, transparent: true, opacity: 0.5 });
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    p.set(buf[i*6], buf[i*6+1], buf[i*6+2]); s.set(buf[i*6+3], buf[i*6+4], buf[i*6+5]);
+    blocks.setMatrixAt(i, m.compose(p, q, s));
+    const e = new THREE.LineSegments(edgeGeo, edgeMat); e.position.copy(p); e.scale.copy(s); scene.add(e);
+  }
+  scene.add(blocks);
+}
+
+// Digital rain: one sprite per drop, positions streamed from the core
+const rainTex = (() => {
+  const glyphs = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789Z';
+  const c = document.createElement('canvas'); c.width = 64; c.height = 1024;
+  const g = c.getContext('2d'); g.font = 'bold 40px monospace'; g.textAlign = 'center';
+  for (let i = 0; i < 24; i++) {
+    g.fillStyle = i === 0 ? '#e8ffe8' : `rgba(0,255,65,${Math.max(0.05, 1 - i/22)})`;
+    g.fillText(glyphs[Math.random()*glyphs.length|0], 32, 42 + i*41);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const rainMat = new THREE.SpriteMaterial({ map: rainTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+const rain = Array.from({ length: game.rain_len() / 3 }, () => {
+  const s = new THREE.Sprite(rainMat); s.scale.set(0.9, 14, 1); scene.add(s); return s;
+});
+
+// ---------- Weapon viewmodel (purely visual, stays JS-side) ----------
+const gun = new THREE.Group();
+const gunMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.4, metalness: 0.9 });
+const gunEdge = new THREE.LineBasicMaterial({ color: G, transparent: true, opacity: 0.8 });
+for (const [w, h, d, x, y, z] of [[0.08,0.10,0.55,0,0,-0.1],[0.05,0.05,0.35,0,0.02,-0.55],[0.07,0.22,0.10,0,-0.15,0.1]]) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const m = new THREE.Mesh(g, gunMat); m.position.set(x, y, z);
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), gunEdge); e.position.set(x, y, z);
+  gun.add(m, e);
+}
+const muzzle = new THREE.PointLight(0xffffff, 0, 6); muzzle.position.set(0, 0.02, -0.75); gun.add(muzzle);
+const muzzleFlash = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }));
+muzzleFlash.scale.setScalar(0.25); muzzleFlash.position.copy(muzzle.position); gun.add(muzzleFlash);
+const GUN_REST = new THREE.Vector3(0.28, -0.26, -0.5);
+gun.position.copy(GUN_REST); camera.add(gun); scene.add(camera);
+
+// ---------- Enemy pool ----------
+const eBody = new THREE.CapsuleGeometry(0.45, 1.1, 6, 12), eHead = new THREE.SphereGeometry(0.28, 12, 12);
+const eEdgeGeo = new THREE.EdgesGeometry(eBody, 25);
+const eEdge = new THREE.LineBasicMaterial({ color: R, transparent: true, opacity: 0.9 });
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const enemyPool = Array.from({ length: game.max_enemies() }, () => {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x1a0000, emissive: R, emissiveIntensity: 0.4, roughness: 0.3, metalness: 0.7 });
+  const b = new THREE.Mesh(eBody, mat); b.position.y = 1.05;
+  const be = new THREE.LineSegments(eEdgeGeo, eEdge); be.position.y = 1.05;
+  const h = new THREE.Mesh(eHead, mat); h.position.y = 2.05;
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.05), eyeMat); eye.position.set(0, 2.08, 0.25);
+  g.add(b, be, h, eye); g.visible = false; g.userData.mat = mat; scene.add(g); return g;
+});
+
+// ---------- Particles: one InstancedMesh, count driven by the core ----------
+const particles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.12, 0.12),
+  new THREE.MeshBasicMaterial({ color: R }), game.max_particles());
+particles.count = 0; particles.frustumCulled = false; scene.add(particles);
+
+// ---------- Input ----------
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true; if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); });
+addEventListener('keyup', e => keys[e.code] = false);
+let locked = false;
+const menu = $('menu'), hud = $('hud'), msg = $('msg'), cross = $('cross'), hit = $('hit'), flash = $('flash'), waveEl = $('wave');
+menu.addEventListener('click', () => document.body.requestPointerLock());
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === document.body;
+  menu.classList.toggle('off', locked); hud.classList.add('on');
+  if (locked && !alive) { game.reset(); msg.classList.remove('on'); }
+});
+document.addEventListener('mousemove', e => { if (locked) game.look(e.movementX, e.movementY); });
+
+// ---------- Shooting (hit detection in the core; visuals here) ----------
+const tracers = [];
+let recoil = 0, shake = 0, alive = true;
+addEventListener('mousedown', e => {
+  if (!locked || e.button !== 0 || !game.fire()) return;
+  recoil = 1; shake = 0.4;
+  cross.classList.add('kick'); setTimeout(() => cross.classList.remove('kick'), 80);
+  muzzle.intensity = 30; muzzleFlash.material.opacity = 1; muzzleFlash.material.rotation = Math.random()*6;
+  const shot = f32(game.shot_ptr(), 4);
+  const from = gun.localToWorld(muzzle.position.clone());
+  const to = new THREE.Vector3(shot[1], shot[2], shot[3]);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]),
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 }));
+  scene.add(line); tracers.push(line);
+});
+
+function announceWave(w) {
+  waveEl.textContent = `WAVE ${w}`; waveEl.classList.add('on');
+  setTimeout(() => waveEl.classList.remove('on'), 2200);
+}
+
+// ---------- Frame loop ----------
+const clock = new THREE.Clock();
+const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), v1 = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+let flashA = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta(), t = clock.elapsedTime;
+
+  // 1. step the core
+  const k = c => keys[c] ? 1 : 0;
+  const fwd = locked ? k('ArrowUp') + k('KeyW') - k('ArrowDown') - k('KeyS') : 0;
+  const right = locked ? k('ArrowRight') + k('KeyD') - k('ArrowLeft') - k('KeyA') : 0;
+  const ev = game.step(dt, fwd, right, !!(keys.ShiftLeft || keys.ShiftRight));
+
+  // 2. read state
+  const st = f32(game.state_ptr(), 12);
+  const [px, py, pz, yaw, pitch, hp, kills, wave, aliveF, active, bob, moving] = st;
+  alive = aliveF > 0.5;
+  camera.position.set(px, py, pz);
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  keyLight.position.set(px, 12, pz);
+
+  // 3. events
+  if (ev & EV.WAVE) announceWave(wave);
+  if (ev & EV.HIT) { hit.classList.remove('show'); void hit.offsetWidth; hit.classList.add('show'); }
+  if (ev & EV.DAMAGE) flashA = 1;
+  if (ev & EV.DEATH) {
+    $('final').textContent = `AGENTS TERMINATED: ${kills}  //  REACHED WAVE ${wave}`;
+    msg.classList.add('on'); document.exitPointerLock();
+  }
+  flashA = Math.max(0, flashA - dt*2.5); flash.style.opacity = flashA;
+
+  // 4. weapon feel
+  recoil = Math.max(0, recoil - dt*10); shake = Math.max(0, shake - dt*4);
+  gun.position.set(GUN_REST.x + Math.sin(bob*0.5)*0.012*moving,
+    GUN_REST.y + Math.abs(Math.cos(bob*0.5))*0.012*moving - recoil*0.02, GUN_REST.z + recoil*0.08);
+  gun.rotation.x = recoil*0.25; gun.rotation.z = (Math.random()-0.5)*shake*0.06;
+  muzzle.intensity *= Math.pow(0.001, dt);
+  muzzleFlash.material.opacity = Math.max(0, muzzleFlash.material.opacity - dt*14);
+
+  // 5. stream buffers -> scene
+  const rb = f32(game.rain_ptr(), game.rain_len());
+  for (let i = 0; i < rain.length; i++) rain[i].position.set(rb[i*3], rb[i*3+1], rb[i*3+2]);
+
+  const n = game.enemy_count(), eb = f32(game.enemies_ptr(), n*6);
+  for (let i = 0; i < enemyPool.length; i++) {
+    const g = enemyPool[i]; g.visible = i < n; if (!g.visible) continue;
+    g.position.set(eb[i*6], eb[i*6+1], eb[i*6+2]); g.rotation.y = eb[i*6+3];
+    g.userData.mat.emissiveIntensity = eb[i*6+4] > 0 ? 3 : 0.4 + Math.sin(t*4 + i)*0.15;
+  }
+
+  const pc = game.particle_count(), pb = f32(game.particles_ptr(), pc*4);
+  for (let i = 0; i < pc; i++) {
+    v1.set(pb[i*4], pb[i*4+1], pb[i*4+2]);
+    particles.setMatrixAt(i, m4.compose(v1, q0.setFromEuler(new THREE.Euler(t*6 + i, t*4, 0)), one));
+  }
+  particles.count = pc; particles.instanceMatrix.needsUpdate = true;
+
+  for (let i = tracers.length-1; i >= 0; i--) {
+    tracers[i].material.opacity -= dt*10;
+    if (tracers[i].material.opacity <= 0) { scene.remove(tracers[i]); tracers.splice(i, 1); }
+  }
+
+  // 6. hud
+  $('hpbar').style.width = hp + '%'; $('hpbar').classList.toggle('low', hp < 30);
+  $('hpnum').textContent = Math.ceil(hp);
+  $('kills').textContent = String(kills).padStart(3, '0');
+  $('active').textContent = `ACTIVE ${active}  //  WAVE ${wave}`;
+
+  composer.render();
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
