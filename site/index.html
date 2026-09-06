@@ -92,6 +92,15 @@
   #menu .how ol{margin:0;padding-left:18px}
   #menu .cta{display:none;margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite;cursor:pointer}
   #menu .cta.on{display:block}
+  #menu .legal{margin-top:8px;text-align:center;font-size:10px;letter-spacing:.14em;line-height:1.7;opacity:.4;max-width:900px}
+  #menu .legal a{color:inherit}
+  #menu{justify-content:safe center} /* scroll rather than clip the top when the column overflows */
+  @media (max-height:720px){
+    #menu{gap:14px}
+    #menu h1{font-size:clamp(30px,6vw,56px)}
+    #menu .cols{gap:36px}
+    #menu .how{line-height:1.5}
+  }
   @keyframes pulse{50%{box-shadow:0 0 18px rgba(0,255,65,.6);background:rgba(0,255,65,.08)}}
   #neo{min-height:22px;font-size:15px;letter-spacing:.18em;opacity:.9;text-shadow:0 0 10px var(--g)}
   #pills{display:flex;gap:44px;flex-wrap:wrap;justify-content:center;opacity:0;pointer-events:none;transition:opacity .8s}
@@ -177,6 +186,9 @@
     <div class="pill blue" id="pillBlue"><div class="orb"></div>TAKE THE BLUE PILL<small>wake up and believe whatever you want</small></div>
   </div>
   <div class="cta" id="cta">CLICK TO RESUME</div>
+  <div class="legal">A NON-COMMERCIAL PROOF OF CONCEPT // A FAN-MADE TECH DEMO FOR RUST, WASM AND THREE.JS<br>
+    THE MATRIX AND ALL RELATED NAMES, QUOTES AND IMAGERY BELONG TO WARNER BROS. NO AFFILIATION, NO CLAIM MADE.
+    SOURCE ON <a href="https://github.com/kcearns/the-construct" target="_blank" rel="noopener">GITHUB</a>, MIT.</div>
 </div>
 
 <div id="wake"><div id="waketext"></div><div class="hint">CLICK TO OPEN YOUR EYES</div></div>

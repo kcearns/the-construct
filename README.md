@@ -181,6 +181,14 @@ A debug handle is exposed on the page as `window.__construct` for poking at
 the core from the browser console, e.g. `__construct.level(10)` jumps straight
 to the Architect and `__construct.win()` replays the ending.
 
+## Disclaimer
+
+This is a non-commercial proof of concept: a fan-made tech demo for Rust,
+WASM and three.js that borrows The Matrix as a theme. The Matrix and all
+related names, quotes and imagery belong to Warner Bros. No affiliation is
+implied and no claim is made on any of it.
+
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The license covers the code in this repository
+only, not the borrowed theme.
