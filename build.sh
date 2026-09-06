@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the Rust game core to WASM and generate JS bindings into ./pkg
+# Build the Rust game core to WASM and generate JS bindings into site/pkg
 set -euo pipefail
 cd "$(dirname "$0")/core"
 # Strip local filesystem paths (home dir, cargo registry) from panic-location
