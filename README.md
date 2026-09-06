@@ -3,6 +3,11 @@
 Matrix-style first-person shooter. Game core in Rust compiled to WebAssembly,
 rendered with three.js.
 
+**Play it:** https://the-construct.kevin-128.workers.dev
+
+Arrow keys or WASD to move, mouse to look, click to fire, shift to sprint.
+Terminate every agent to clear the level.
+
 ```
 core/src/lib.rs     Rust game core: world gen, movement + collision, enemy AI,
                     raycast hit detection, waves, particles, digital rain
@@ -50,3 +55,7 @@ and rain buffers and copies them into three.js objects. Mouse deltas go to
 `game.look()`, clicks call `game.fire()`, which raycasts against buildings and
 agents in Rust and writes the impact point for the tracer. No per-frame object
 allocation crosses the boundary; everything is flat f32 buffers and numbers.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
