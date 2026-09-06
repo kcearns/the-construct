@@ -2,15 +2,18 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_game_free: (a: number, b: number) => void;
+export const game_architect_hp_max: (a: number) => number;
 export const game_blocks_len: (a: number) => number;
 export const game_blocks_ptr: (a: number) => number;
 export const game_enemies_ptr: (a: number) => number;
 export const game_enemy_count: (a: number) => number;
 export const game_fire: (a: number) => number;
+export const game_jump_to_level: (a: number, b: number) => void;
 export const game_level_speed_pct: (a: number) => number;
 export const game_level_total: (a: number) => number;
 export const game_look: (a: number, b: number, c: number) => void;
 export const game_max_enemies: (a: number) => number;
+export const game_max_level: (a: number) => number;
 export const game_max_particles: (a: number) => number;
 export const game_new: (a: number) => number;
 export const game_particle_count: (a: number) => number;

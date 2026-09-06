@@ -22,6 +22,12 @@ pub const EV_KILL: u32 = 4;
 pub const EV_DEATH: u32 = 8;
 pub const EV_DAMAGE: u32 = 16;
 pub const EV_LEVEL_START: u32 = 32;
+pub const EV_WIN: u32 = 64;
+
+/// Number of levels. The last one is the Architect fight.
+pub const MAX_LEVEL: u32 = 10;
+const ARCHITECT_HP: i32 = 30;
+const ARCHITECT_BLINK: f32 = 5.0;
 
 /// Seconds the level-clear sequence lasts before the next level loads.
 pub const CLEAR_DURATION: f32 = 5.0;
@@ -38,7 +44,7 @@ const SHOT_ENEMY: f32 = 2.0;
 // Per-item stride of each output buffer (floats).
 pub const BLOCK_STRIDE: usize = 6; // cx cy cz w h d
 pub const RAIN_STRIDE: usize = 3; // x y z
-pub const ENEMY_STRIDE: usize = 7; // x y z yaw hit_t hp age
+pub const ENEMY_STRIDE: usize = 8; // x y z yaw hit_t hp age kind
 pub const PARTICLE_STRIDE: usize = 4; // x y z life
 
 struct Rng(u64);
@@ -114,12 +120,19 @@ struct Enemy {
     speed: f32,
     phase: f32,
     age: f32,
+    /// 0 = agent, 1 = the Architect.
+    kind: u8,
+    /// Contact damage per second.
+    damage: f32,
+    /// Architect only: countdown to its next phase-shift teleport.
+    blink_t: f32,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum Phase {
     Playing,
     Clear,
+    Won,
 }
 
 /// Difficulty curve for a level.
@@ -130,6 +143,9 @@ struct LevelParams {
     hp: i32,
 }
 fn level_params(level: u32) -> LevelParams {
+    if level >= MAX_LEVEL {
+        return LevelParams { total: 1, max_active: 1, speed: 4.6, hp: ARCHITECT_HP };
+    }
     let n = level.max(1) - 1;
     LevelParams {
         total: (3 + n * 2).min(24),
@@ -257,6 +273,17 @@ impl Game {
 
     /// Current level's agent count, for the HUD / level intro.
     pub fn level_total(&self) -> u32 { level_params(self.level).total }
+    pub fn max_level(&self) -> u32 { MAX_LEVEL }
+    /// Debug helper: restart at the given level (clamped to 1..=MAX_LEVEL).
+    pub fn jump_to_level(&mut self, level: u32) {
+        self.level = level.clamp(1, MAX_LEVEL);
+        self.hp = 100.0;
+        self.alive = true;
+        self.particles.clear();
+        self.start_level();
+        self.pack();
+    }
+    pub fn architect_hp_max(&self) -> i32 { ARCHITECT_HP }
     /// Speed of this level's agents relative to level 1, as a percentage.
     pub fn level_speed_pct(&self) -> u32 {
         (level_params(self.level).speed / level_params(1).speed * 100.0).round() as u32
@@ -318,9 +345,14 @@ impl Game {
                     self.events |= EV_KILL;
                     let lp = level_params(self.level);
                     if self.level_killed >= lp.total {
-                        self.phase = Phase::Clear;
                         self.phase_t = 0.0;
-                        self.events |= EV_LEVEL_CLEAR;
+                        if self.level >= MAX_LEVEL {
+                            self.phase = Phase::Won;
+                            self.events |= EV_WIN;
+                        } else {
+                            self.phase = Phase::Clear;
+                            self.events |= EV_LEVEL_CLEAR;
+                        }
                     } else if self.level_spawned < lp.total {
                         self.spawn_enemy();
                     }
@@ -345,6 +377,8 @@ impl Game {
         // the next level loads.
         self.time_scale = match self.phase {
             Phase::Playing => 1.0,
+            // The world stays frozen in bullet time after the Architect falls.
+            Phase::Won => CLEAR_SLOWMO,
             Phase::Clear => {
                 if self.phase_t >= CLEAR_DURATION {
                     self.level += 1;
@@ -445,9 +479,10 @@ impl Game {
             return;
         }
         self.level_spawned += 1;
+        let architect = self.level >= MAX_LEVEL;
         let a = self.rng.range(0.0, core::f32::consts::TAU);
-        let r = self.rng.range(24.0, 50.0);
-        let speed = lp.speed * self.rng.range(0.9, 1.15);
+        let r = if architect { 30.0 } else { self.rng.range(24.0, 50.0) };
+        let speed = if architect { lp.speed } else { lp.speed * self.rng.range(0.9, 1.15) };
         self.enemies.push(Enemy {
             x: (self.px + a.cos() * r).clamp(-HALF, HALF),
             y: 0.0,
@@ -458,7 +493,22 @@ impl Game {
             speed,
             phase: self.rng.range(0.0, 6.28),
             age: 0.0,
+            kind: architect as u8,
+            damage: if architect { 45.0 } else { 22.0 },
+            blink_t: ARCHITECT_BLINK,
         });
+    }
+
+    /// The Architect phase-shifts to a new spot near the player and
+    /// re-materializes there.
+    fn blink(&mut self, i: usize) {
+        let a = self.rng.range(0.0, core::f32::consts::TAU);
+        let r = self.rng.range(10.0, 18.0);
+        let e = &mut self.enemies[i];
+        e.x = (self.px + a.cos() * r).clamp(-HALF, HALF);
+        e.z = (self.pz + a.sin() * r).clamp(-HALF, HALF);
+        e.age = 0.0;
+        e.blink_t = ARCHITECT_BLINK;
     }
 
     fn burst(&mut self, at: [f32; 3]) {
@@ -532,9 +582,16 @@ impl Game {
     }
 
     fn update_enemies(&mut self, dt: f32) {
-        let mut touching = false;
+        let mut damage = 0.0f32;
         let t = self.time;
-        for e in &mut self.enemies {
+        let mut blink: Option<usize> = None;
+        for (i, e) in self.enemies.iter_mut().enumerate() {
+            if e.kind == 1 && e.age >= MATERIALIZE {
+                e.blink_t -= dt;
+                if e.blink_t <= 0.0 {
+                    blink = Some(i);
+                }
+            }
             let (tx, tz) = (self.px - e.x, self.pz - e.z);
             let d = tx.hypot(tz);
             e.yaw = tx.atan2(tz);
@@ -548,11 +605,14 @@ impl Game {
                 e.x += tx / d * e.speed * dt;
                 e.z += tz / d * e.speed * dt;
             } else {
-                touching = true;
+                damage = damage.max(e.damage);
             }
         }
-        if touching && self.alive {
-            self.hp -= 22.0 * dt;
+        if let Some(i) = blink {
+            self.blink(i);
+        }
+        if damage > 0.0 && self.alive {
+            self.hp -= damage * dt;
             self.events |= EV_DAMAGE;
         }
     }
@@ -578,7 +638,7 @@ impl Game {
         for (i, e) in self.enemies.iter().enumerate() {
             let o = i * ENEMY_STRIDE;
             self.enemy_buf[o..o + ENEMY_STRIDE]
-                .copy_from_slice(&[e.x, e.y, e.z, e.yaw, e.hit_t, e.hp as f32, e.age]);
+                .copy_from_slice(&[e.x, e.y, e.z, e.yaw, e.hit_t, e.hp as f32, e.age, e.kind as f32]);
         }
         for (i, p) in self.particles.iter().enumerate() {
             let o = i * PARTICLE_STRIDE;
@@ -591,7 +651,8 @@ impl Game {
             if self.alive { 1.0 } else { 0.0 },
             self.enemies.len() as f32, self.bob, self.moving,
             level_params(self.level).total as f32, self.level_killed as f32,
-            self.time_scale, if self.phase == Phase::Clear { 1.0 } else { 0.0 },
+            self.time_scale,
+            match self.phase { Phase::Playing => 0.0, Phase::Clear => 1.0, Phase::Won => 2.0 },
         ];
     }
 }
@@ -621,6 +682,47 @@ fn ray_cylinder(o: [f32; 3], d: [f32; 3], cx: f32, cz: f32, r: f32, y0: f32, y1:
 mod tests {
     use super::*;
 
+    /// A stationary agent 10 units straight ahead of the spawn point.
+    fn test_enemy(hp: i32) -> Enemy {
+        Enemy { x: 0.0, y: 0.0, z: -10.0, yaw: 0.0, hp, hit_t: 0.0, speed: 0.0, phase: 0.0, age: 1.0, kind: 0, damage: 22.0, blink_t: 0.0 }
+    }
+
+    #[test]
+    fn level_ten_is_the_architect_and_clearing_it_wins() {
+        let mut g = Game::new(21);
+        g.level = MAX_LEVEL;
+        g.start_level();
+        assert_eq!(g.enemies.len(), 1);
+        let a = &g.enemies[0];
+        assert_eq!(a.kind, 1);
+        assert_eq!(a.hp, ARCHITECT_HP);
+        assert!(a.damage > 22.0, "the Architect hits harder than an agent");
+
+        // Architect phase-shifts after its blink timer runs out.
+        g.enemies[0].speed = 0.0; // keep it from reaching (and killing) the player
+        let (x0, z0) = (g.enemies[0].x, g.enemies[0].z);
+        for _ in 0..((ARCHITECT_BLINK + MATERIALIZE + 1.0) / 0.05) as usize {
+            g.step(0.05, 0.0, 0.0, false);
+        }
+        assert!((g.enemies[0].x - x0).abs() + (g.enemies[0].z - z0).abs() > 1.0, "architect should have teleported");
+
+        // Park it in front of the player and shoot it down.
+        g.enemies[0] = Enemy { kind: 1, hp: ARCHITECT_HP, blink_t: 1000.0, ..test_enemy(0) };
+        let mut ev = 0;
+        for _ in 0..ARCHITECT_HP * 4 {
+            g.fire();
+            for _ in 0..3 { ev |= g.step(0.05, 0.0, 0.0, false); }
+            if ev & EV_WIN != 0 { break; }
+        }
+        assert!(ev & EV_WIN != 0, "killing the Architect should win the game");
+        assert!(ev & EV_LEVEL_CLEAR == 0);
+        assert_eq!(g.level, MAX_LEVEL, "no level 11");
+        for _ in 0..200 { g.step(0.05, 0.0, 0.0, false); }
+        assert_eq!(g.level, MAX_LEVEL);
+        assert!(g.enemies.is_empty());
+        assert!(g.time_scale < 0.2, "world stays in bullet time after the win");
+    }
+
     #[test]
     fn world_is_deterministic_and_clear_at_spawn() {
         let a = Game::new(7);
@@ -646,7 +748,7 @@ mod tests {
         let mut g = Game::new(3);
         g.enemies.clear();
         // yaw 0 looks down -Z; put an agent 10 units ahead.
-        g.enemies.push(Enemy { x: 0.0, y: 0.0, z: -10.0, yaw: 0.0, hp: 2, hit_t: 0.0, speed: 0.0, phase: 0.0, age: 1.0 });
+        g.enemies.push(test_enemy(2));
         g.level_spawned = 1;
         assert!(g.fire());
         assert_eq!(g.shot_buf[0], SHOT_ENEMY);

@@ -62,6 +62,12 @@
   #msg{left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;padding:26px 40px;display:none}
   #msg.on{display:block}
   #msg h2{margin:0 0 8px;font-size:34px;letter-spacing:.2em;color:var(--r);text-shadow:0 0 12px var(--r)}
+  #msg.win h2{color:#eafff0;text-shadow:0 0 14px #fff,0 0 40px var(--g)}
+  #boss{left:50%;top:28px;transform:translateX(-50%);min-width:340px;text-align:center;display:none}
+  #boss.on{display:block}
+  #boss .lbl{font-size:11px;letter-spacing:.35em;opacity:.8;margin-bottom:6px;color:#eafff0}
+  #bossbar{height:6px;background:rgba(255,255,255,.1);border:1px solid rgba(234,255,240,.5);overflow:hidden}
+  #bossbar b{display:block;height:100%;width:100%;background:#eafff0;box-shadow:0 0 12px #fff;transition:width .1s}
   #msg p{margin:6px 0;opacity:.85}
 
   /* Menu */
@@ -71,8 +77,13 @@
   #menu h1{margin:0;font-size:clamp(40px,8vw,88px);letter-spacing:.3em;font-weight:400;text-shadow:0 0 20px var(--g),0 0 60px rgba(0,255,65,.4);animation:flk 4s infinite}
   @keyframes flk{0%,92%,100%{opacity:1}93%{opacity:.5}95%{opacity:1}97%{opacity:.6}}
   #menu .sub{font-size:14px;letter-spacing:.35em;opacity:.7}
-  #menu .keys{display:grid;grid-template-columns:auto auto;gap:6px 22px;font-size:13px;opacity:.85;margin-top:8px}
+  #menu .cols{display:flex;gap:56px;align-items:flex-start;margin-top:4px;flex-wrap:wrap;justify-content:center}
+  #menu h3{margin:0 0 10px;font-size:12px;font-weight:400;letter-spacing:.35em;opacity:.55}
+  #menu .keys{display:grid;grid-template-columns:auto auto;gap:6px 22px;font-size:13px;opacity:.85}
   #menu .keys span:nth-child(odd){text-align:right;opacity:.6}
+  #menu .how{font-size:13px;line-height:1.75;max-width:380px;opacity:.85}
+  #menu .how b{font-weight:400;color:#eafff0}
+  #menu .how ol{margin:0;padding-left:18px}
   #menu .cta{margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite}
   @keyframes pulse{50%{box-shadow:0 0 18px rgba(0,255,65,.6);background:rgba(0,255,65,.08)}}
 </style>
@@ -95,18 +106,33 @@
     <div id="prog"><b id="progbar"></b></div>
   </div>
   <div id="lvl"><h2 id="lvlh"></h2><p id="lvlp"></p></div>
-  <div class="panel" id="msg"><h2>SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
+  <div class="panel" id="boss"><div class="lbl">THE ARCHITECT</div><div id="bossbar"><b id="bossfill"></b></div></div>
+  <div class="panel" id="msg"><h2 id="msgh">SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
 </div>
 
 <div id="menu">
   <h1>THE CONSTRUCT</h1>
   <div class="sub">LOADING PROGRAM // RUST + WASM CORE // THREE.JS RENDERER</div>
-  <div class="keys">
-    <span>ARROWS / WASD</span><span>move</span>
-    <span>MOUSE</span><span>look</span>
-    <span>CLICK</span><span>fire</span>
-    <span>SHIFT</span><span>sprint</span>
-    <span>OBJECTIVE</span><span>terminate every agent to clear the level</span>
+  <div class="cols">
+    <div>
+      <h3>CONTROLS</h3>
+      <div class="keys">
+        <span>ARROWS / WASD</span><span>move</span>
+        <span>MOUSE</span><span>look</span>
+        <span>CLICK</span><span>fire</span>
+        <span>SHIFT</span><span>sprint</span>
+        <span>ESC</span><span>pause</span>
+      </div>
+    </div>
+    <div class="how">
+      <h3>HOW TO PLAY</h3>
+      <ol>
+        <li><b>10 levels.</b> Terminate every agent to clear a level.</li>
+        <li>Each level sends <b>more agents, faster</b>. Agents take two hits; tougher ones appear later.</li>
+        <li>Agents drain your <b>integrity</b> on contact. At zero, the system fails.</li>
+        <li><b>Level 10 is the Architect</b>: one program, far more resilient, that phase-shifts around you. Delete it to win.</li>
+      </ol>
+    </div>
   </div>
   <div class="cta" id="cta">COMPILING CORE…</div>
 </div>
@@ -134,11 +160,12 @@ const game = new Game((Math.random() * 0xffffffff) >>> 0);
 const WORLD = game.world_size();
 // Views are rebuilt each frame: WASM memory can grow and detach old buffers.
 const f32 = (ptr, len) => new Float32Array(wasm.memory.buffer, ptr, len);
-const EV = { LEVEL_CLEAR: 1, HIT: 2, KILL: 4, DEATH: 8, DAMAGE: 16, LEVEL_START: 32 };
-const ES = 7; // enemy buffer stride
+const EV = { LEVEL_CLEAR: 1, HIT: 2, KILL: 4, DEATH: 8, DAMAGE: 16, LEVEL_START: 32, WIN: 64 };
+const ES = 8; // enemy buffer stride
+const MAX_LEVEL = game.max_level(), ARCH_HP = game.architect_hp_max();
 $('cta').textContent = 'CLICK TO JACK IN';
 // Debug handle for the devtools console: window.__construct.game.step(...) etc.
-window.__construct = { game, hud: () => $('hud').classList.add('on'), clear: () => onLevelClear(1, 3), start: () => onLevelStart(2) };
+window.__construct = { game, wasm, hud: () => $('hud').classList.add('on'), clear: () => onLevelClear(1, 3), start: () => onLevelStart(2), win: () => onWin(88), level: n => { game.jump_to_level(n); pendingIntro = true; } };
 
 // ---------- Renderer / scene ----------
 const scene = new THREE.Scene();
@@ -227,6 +254,22 @@ const enemyPool = Array.from({ length: game.max_enemies() }, () => {
   g.add(b, be, h, eye); g.visible = false; g.userData.mat = mat; scene.add(g); return g;
 });
 
+// The Architect: a single larger program in white, with green circuitry edges.
+const architect = (() => {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0xeafff0, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.9 });
+  const edge = new THREE.LineBasicMaterial({ color: G, transparent: true, opacity: 0.9 });
+  const b = new THREE.Mesh(eBody, mat); b.position.y = 1.05;
+  const be = new THREE.LineSegments(eEdgeGeo, edge); be.position.y = 1.05;
+  const h = new THREE.Mesh(eHead, mat); h.position.y = 2.05;
+  const he = new THREE.LineSegments(new THREE.EdgesGeometry(eHead, 20), edge); he.position.y = 2.05;
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: G })); eye.position.set(0, 2.08, 0.25);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.02, 6, 48), new THREE.MeshBasicMaterial({ color: G }));
+  halo.rotation.x = Math.PI/2; halo.position.y = 2.6;
+  const light = new THREE.PointLight(0xeafff0, 20, 14, 1.5); light.position.y = 2;
+  g.add(b, be, h, he, eye, halo, light); g.visible = false; g.userData = { mat, halo }; scene.add(g); return g;
+})();
+
 // ---------- Particles: one InstancedMesh, count driven by the core ----------
 const particles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.12, 0.12),
   new THREE.MeshBasicMaterial({ color: R }), game.max_particles());
@@ -242,7 +285,7 @@ menu.addEventListener('click', () => document.body.requestPointerLock());
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === document.body;
   menu.classList.toggle('off', locked); hud.classList.add('on');
-  if (locked && !alive) { game.reset(); msg.classList.remove('on'); }
+  if (locked && (!alive || won)) { game.reset(); msg.classList.remove('on'); codeTarget = 0; }
   if (locked) pendingIntro = true; // HUD was hidden when the level-start event fired
 });
 let pendingIntro = false;
@@ -250,7 +293,7 @@ document.addEventListener('mousemove', e => { if (locked) game.look(e.movementX,
 
 // ---------- Shooting (hit detection in the core; visuals here) ----------
 const tracers = [];
-let recoil = 0, shake = 0, alive = true;
+let recoil = 0, shake = 0, alive = true, won = false;
 addEventListener('mousedown', e => {
   if (!locked || e.button !== 0 || !game.fire()) return;
   recoil = 1; shake = 0.4;
@@ -311,8 +354,18 @@ function onLevelClear(level, kills) {
 function onLevelStart(level) {
   const total = game.level_total(), pct = game.level_speed_pct();
   codeTarget = 0;
+  if (level >= MAX_LEVEL) { showLevelText('THE ARCHITECT', 'FINAL LEVEL  //  ONE PROGRAM  //  DELETE IT TO END THIS', 'clear', 4000); return; }
   const sub = level === 1 ? `${total} AGENTS DETECTED  //  TERMINATE ALL` : `${total} AGENTS  //  SPEED ${pct}%  //  TERMINATE ALL`;
-  showLevelText(`LEVEL ${level}`, sub, '', 3000);
+  showLevelText(`LEVEL ${level} / ${MAX_LEVEL}`, sub, '', 3000);
+}
+function onWin(kills) {
+  codeTarget = 1; bloom.strength = 2.8;
+  showLevelText('ARCHITECT DELETED', `ALL ${MAX_LEVEL} LEVELS CLEARED  //  ${String(kills).padStart(3,'0')} PROGRAMS TERMINATED`, 'clear', 4500);
+  setTimeout(() => {
+    $('msgh').textContent = 'YOU ARE THE ONE'; msg.className = 'panel on win';
+    $('final').textContent = 'THE CONSTRUCT HAS BEEN REBOOTED';
+    document.exitPointerLock();
+  }, 3000);
 }
 
 // ---------- Frame loop ----------
@@ -340,12 +393,15 @@ function animate() {
 
   // 3. events
   if (ev & EV.LEVEL_CLEAR) onLevelClear(level, kills);
+  if (ev & EV.WIN) onWin(kills);
+  won = clearing === 2;
   if (ev & EV.LEVEL_START || pendingIntro) { onLevelStart(level); pendingIntro = false; }
   if (ev & EV.HIT) { hit.classList.remove('show'); void hit.offsetWidth; hit.classList.add('show'); }
   if (ev & EV.DAMAGE) flashA = 1;
   if (ev & EV.DEATH) {
-    $('final').textContent = `AGENTS TERMINATED: ${kills}  //  REACHED LEVEL ${level}`;
-    msg.classList.add('on'); document.exitPointerLock();
+    $('msgh').textContent = 'SYSTEM FAILURE'; msg.className = 'panel on';
+    $('final').textContent = `AGENTS TERMINATED: ${kills}  //  REACHED LEVEL ${level} / ${MAX_LEVEL}`;
+    document.exitPointerLock();
   }
   flashA = Math.max(0, flashA - dt*2.5); flash.style.opacity = flashA;
   bloom.strength += (0.9 + (1 - timeScale) * 0.8 - bloom.strength) * Math.min(1, dt * 3);
@@ -364,20 +420,29 @@ function animate() {
   for (let i = 0; i < rain.length; i++) rain[i].position.set(rb[i*3], rb[i*3+1], rb[i*3+2]);
 
   const n = game.enemy_count(), eb = f32(game.enemies_ptr(), n*ES);
+  let bossHp = -1;
+  architect.visible = false;
   for (let i = 0; i < enemyPool.length; i++) {
-    const g = enemyPool[i]; g.visible = i < n; if (!g.visible) continue;
-    const o = i*ES, age = eb[o+6];
+    const isArch = i < n && eb[i*ES+7] > 0.5;
+    const g = isArch ? architect : enemyPool[i];
+    if (isArch) enemyPool[i].visible = false;
+    g.visible = i < n; if (!g.visible) continue;
+    const o = i*ES, age = eb[o+6], base = isArch ? 1.6 : 1;
+    if (isArch) bossHp = eb[o+5];
     g.position.set(eb[o], eb[o+1], eb[o+2]); g.rotation.y = eb[o+3];
     if (age < 0.7) { // materializing: flicker in and stretch up from the floor
       const k = age / 0.7;
       g.visible = Math.random() < 0.35 + k*0.65;
-      g.scale.set(1, 0.1 + 0.9*k, 1);
+      g.scale.set(base, base*(0.1 + 0.9*k), base);
       g.userData.mat.emissiveIntensity = 2 + Math.random()*2;
     } else {
-      g.scale.setScalar(1);
-      g.userData.mat.emissiveIntensity = eb[o+4] > 0 ? 3 : 0.4 + Math.sin(t*4 + i)*0.15;
+      g.scale.setScalar(base);
+      g.userData.mat.emissiveIntensity = eb[o+4] > 0 ? 3 : (isArch ? 0.6 : 0.4) + Math.sin(t*4 + i)*0.15;
     }
+    if (isArch) g.userData.halo.rotation.z = t*1.5;
   }
+  $('boss').classList.toggle('on', bossHp >= 0 && !won);
+  if (bossHp >= 0) $('bossfill').style.width = (bossHp / ARCH_HP * 100) + '%';
 
   const pc = game.particle_count(), pb = f32(game.particles_ptr(), pc*4);
   for (let i = 0; i < pc; i++) {
@@ -395,7 +460,8 @@ function animate() {
   $('hpbar').style.width = hp + '%'; $('hpbar').classList.toggle('low', hp < 30);
   $('hpnum').textContent = Math.ceil(hp);
   $('kills').textContent = String(kills).padStart(3, '0');
-  $('active').textContent = clearing ? `LEVEL ${level}  //  CLEAR` : `LEVEL ${level}  //  ${lvlKilled}/${lvlTotal} AGENTS`;
+  $('active').textContent = won ? 'PROGRAM COMPLETE' : clearing ? `LEVEL ${level} / ${MAX_LEVEL}  //  CLEAR`
+    : level >= MAX_LEVEL ? `LEVEL ${level} / ${MAX_LEVEL}  //  THE ARCHITECT` : `LEVEL ${level} / ${MAX_LEVEL}  //  ${lvlKilled}/${lvlTotal} AGENTS`;
   $('progbar').style.width = (lvlTotal ? lvlKilled/lvlTotal*100 : 0) + '%';
 
   composer.render();

@@ -4,6 +4,7 @@
 export class Game {
     free(): void;
     [Symbol.dispose](): void;
+    architect_hp_max(): number;
     blocks_len(): number;
     blocks_ptr(): number;
     enemies_ptr(): number;
@@ -13,6 +14,10 @@ export class Game {
      * fired (cooldown permitting); result details land in `shot_buf`.
      */
     fire(): boolean;
+    /**
+     * Debug helper: restart at the given level (clamped to 1..=MAX_LEVEL).
+     */
+    jump_to_level(level: number): void;
     /**
      * Speed of this level's agents relative to level 1, as a percentage.
      */
@@ -26,6 +31,7 @@ export class Game {
      */
     look(dx: number, dy: number): void;
     max_enemies(): number;
+    max_level(): number;
     max_particles(): number;
     constructor(seed: number);
     particle_count(): number;
@@ -51,15 +57,18 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_game_free: (a: number, b: number) => void;
+    readonly game_architect_hp_max: (a: number) => number;
     readonly game_blocks_len: (a: number) => number;
     readonly game_blocks_ptr: (a: number) => number;
     readonly game_enemies_ptr: (a: number) => number;
     readonly game_enemy_count: (a: number) => number;
     readonly game_fire: (a: number) => number;
+    readonly game_jump_to_level: (a: number, b: number) => void;
     readonly game_level_speed_pct: (a: number) => number;
     readonly game_level_total: (a: number) => number;
     readonly game_look: (a: number, b: number, c: number) => void;
     readonly game_max_enemies: (a: number) => number;
+    readonly game_max_level: (a: number) => number;
     readonly game_max_particles: (a: number) => number;
     readonly game_new: (a: number) => number;
     readonly game_particle_count: (a: number) => number;

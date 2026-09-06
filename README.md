@@ -6,8 +6,10 @@ written in Rust and compiled to WebAssembly; three.js renders it.
 **Play it:** https://the-construct.kevin-128.workers.dev
 
 Arrow keys or WASD to move, mouse to look, click to fire, shift to sprint.
-Terminate every agent to clear the level. Each level adds more agents and
-makes them faster.
+
+Ten levels. Terminate every agent to clear a level; each one sends more
+agents, faster. Level 10 is the Architect, a single far more resilient
+program that phase-shifts around you. Delete it to win.
 
 ## Layout
 
@@ -68,7 +70,7 @@ cd core && cargo test
 ```
 
 The tests run natively and cover world generation, collision, shooting and
-cooldown, enemy damage, and the level-clear sequence.
+cooldown, enemy damage, the level-clear sequence, and the Architect fight.
 
 ## Deploy to Cloudflare
 
@@ -115,7 +117,8 @@ seconds while the renderer plays the code-rain overlay. Player movement stays
 at real-time speed; only the world slows.
 
 A debug handle is exposed on the page as `window.__construct` for poking at
-the core from the browser console.
+the core from the browser console, e.g. `__construct.level(10)` jumps straight
+to the Architect and `__construct.win()` replays the ending.
 
 ## License
 

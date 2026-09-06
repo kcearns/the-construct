@@ -14,6 +14,13 @@ export class Game {
     /**
      * @returns {number}
      */
+    architect_hp_max() {
+        const ret = wasm.game_architect_hp_max(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     blocks_len() {
         const ret = wasm.game_blocks_len(this.__wbg_ptr);
         return ret >>> 0;
@@ -49,6 +56,13 @@ export class Game {
         return ret !== 0;
     }
     /**
+     * Debug helper: restart at the given level (clamped to 1..=MAX_LEVEL).
+     * @param {number} level
+     */
+    jump_to_level(level) {
+        wasm.game_jump_to_level(this.__wbg_ptr, level);
+    }
+    /**
      * Speed of this level's agents relative to level 1, as a percentage.
      * @returns {number}
      */
@@ -77,6 +91,13 @@ export class Game {
      */
     max_enemies() {
         const ret = wasm.game_max_enemies(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    max_level() {
+        const ret = wasm.game_max_level(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
