@@ -74,7 +74,7 @@
 
   /* Menu */
   #menu{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
-    background:radial-gradient(ellipse at center,rgba(0,30,8,.6),rgba(0,0,0,.82));cursor:pointer;transition:opacity .5s}
+    background:radial-gradient(ellipse at center,rgba(0,30,8,.6),rgba(0,0,0,.82));transition:opacity .5s;overflow:auto;padding:24px}
   #menu.off{opacity:0;pointer-events:none}
   #menu h1{margin:0;font-size:clamp(40px,8vw,88px);letter-spacing:.3em;font-weight:400;text-shadow:0 0 20px var(--g),0 0 60px rgba(0,255,65,.4);animation:flk 4s infinite}
   @keyframes flk{0%,92%,100%{opacity:1}93%{opacity:.5}95%{opacity:1}97%{opacity:.6}}
@@ -86,10 +86,19 @@
   #menu .how{font-size:13px;line-height:1.75;max-width:380px;opacity:.85}
   #menu .how b{font-weight:400;color:#eafff0}
   #menu .how ol{margin:0;padding-left:18px}
-  #menu .cta{margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite}
+  #menu .cta{display:none;margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite;cursor:pointer}
+  #menu .cta.on{display:block}
   @keyframes pulse{50%{box-shadow:0 0 18px rgba(0,255,65,.6);background:rgba(0,255,65,.08)}}
   #neo{min-height:22px;font-size:15px;letter-spacing:.18em;opacity:.9;text-shadow:0 0 10px var(--g)}
-  #pills{display:flex;gap:44px;flex-wrap:wrap;justify-content:center}
+  #pills{display:flex;gap:44px;flex-wrap:wrap;justify-content:center;opacity:0;pointer-events:none;transition:opacity .8s}
+  #pills.on{opacity:1;pointer-events:auto}
+  /* menu states: boot (first load), paused (Escape mid-run), over (death or win) */
+  #menu:not([data-state=boot]) .cols,#menu:not([data-state=boot]) .sub{display:none}
+  #result{display:none;text-align:center}
+  #result.on{display:block}
+  #result h2{margin:0 0 10px;font-size:clamp(26px,4.5vw,44px);font-weight:400;letter-spacing:.25em;color:var(--r);text-shadow:0 0 14px var(--r)}
+  #result.win h2{color:#eafff0;text-shadow:0 0 14px #fff,0 0 40px var(--g)}
+  #result p{margin:0;font-size:13px;letter-spacing:.25em;opacity:.8}
   .pill{display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;padding:16px 24px;border:1px solid transparent;transition:.2s;letter-spacing:.25em;font-size:12px}
   .pill:hover{border-color:currentColor;box-shadow:0 0 18px -4px currentColor}
   .pill .orb{width:32px;height:32px;border-radius:50%;box-shadow:0 0 22px currentColor}
@@ -129,11 +138,12 @@
   <div id="sub"></div>
   <div class="panel" id="boss"><div class="lbl">THE ARCHITECT</div><div id="bossbar"><b id="bossfill"></b></div></div>
   <div id="audio">M // AUDIO ON</div>
-  <div class="panel" id="msg"><h2 id="msgh">SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
+  <div class="panel" id="msg"><h2 id="msgh">SYSTEM FAILURE</h2><p id="final"></p></div>
 </div>
 
-<div id="menu">
+<div id="menu" data-state="boot">
   <h1>THE CONSTRUCT</h1>
+  <div id="result"><h2 id="resh"></h2><p id="resp"></p></div>
   <div class="sub">RUST + WASM CORE // THREE.JS RENDERER // WEB AUDIO TECHNO</div>
   <div class="cols">
     <div>
@@ -157,11 +167,12 @@
       </ol>
     </div>
   </div>
-  <div id="neo"></div>
+  <div id="neo">COMPILING CORE…</div>
   <div id="pills">
-    <div class="pill red" id="pillRed"><div class="orb"></div>TAKE THE RED PILL<small>stay in the construct // jack in</small></div>
+    <div class="pill red" id="pillRed"><div class="orb"></div>TAKE THE RED PILL<small id="redsub">stay in the construct // jack in</small></div>
     <div class="pill blue" id="pillBlue"><div class="orb"></div>TAKE THE BLUE PILL<small>wake up and believe whatever you want</small></div>
   </div>
+  <div class="cta" id="cta">CLICK TO RESUME</div>
 </div>
 
 <div id="wake"><div id="waketext"></div><div class="hint">CLICK TO OPEN YOUR EYES</div></div>
@@ -193,25 +204,29 @@ const f32 = (ptr, len) => new Float32Array(wasm.memory.buffer, ptr, len);
 const EV = { LEVEL_CLEAR: 1, HIT: 2, KILL: 4, DEATH: 8, DAMAGE: 16, LEVEL_START: 32, WIN: 64 };
 const ES = 8; // enemy buffer stride
 const MAX_LEVEL = game.max_level(), ARCH_HP = game.architect_hp_max();
-// Neo typewriter intro, then the pill choice fades in.
+// Neo typewriter intro, then the pill choice fades in. A click skips it.
 const NEO_LINES = ['Wake up, Neo...', 'The Matrix has you...', 'Follow the white rabbit.'];
 const neoEl = $('neo'), pillsEl = $('pills');
-pillsEl.style.opacity = '0'; pillsEl.style.transition = 'opacity .8s';
-(function typeNeo(i) {
-  if (i >= NEO_LINES.length) { neoEl.textContent = 'Knock, knock, Neo.'; pillsEl.style.opacity = '1'; return; }
-  const line = NEO_LINES[i]; let j = 0;
-  const iv = setInterval(() => {
-    neoEl.textContent = line.slice(0, ++j);
-    if (j >= line.length) { clearInterval(iv); setTimeout(() => typeNeo(i + 1), 650); }
-  }, 34);
-})(0);
+let introTimer = 0, introDone = false;
+function finishIntro() {
+  if (introDone) return;
+  introDone = true; clearTimeout(introTimer);
+  neoEl.textContent = 'Knock, knock, Neo.'; pillsEl.classList.add('on');
+}
+(function typeNeo(i, j) {
+  if (introDone) return;
+  if (i >= NEO_LINES.length) return finishIntro();
+  const line = NEO_LINES[i];
+  neoEl.textContent = line.slice(0, j);
+  introTimer = setTimeout(() => j < line.length ? typeNeo(i, j + 1) : typeNeo(i + 1, 0), j < line.length ? 34 : 650);
+})(0, 0);
 // Procedural techno soundtrack + SFX (site/audio.js). Starts on the first click.
 const audio = createAudio();
 const audioInd = $('audio');
 function showMute() { audioInd.textContent = audio.muted ? 'M // AUDIO MUTED' : 'M // AUDIO ON'; audioInd.classList.toggle('muted', audio.muted); }
 showMute();
 // Debug handle for the devtools console: window.__construct.game.step(...) etc.
-window.__construct = { game, wasm, audio, hud: () => $('hud').classList.add('on'), clear: () => onLevelClear(1, 3), start: () => onLevelStart(2), win: () => onWin(88), level: n => { game.jump_to_level(n); pendingIntro = true; } };
+window.__construct = { game, wasm, audio, hud: () => $('hud').classList.add('on'), clear: () => onLevelClear(1, 3), start: () => onLevelStart(2), win: () => onWin(88), level: n => game.jump_to_level(n) };
 
 // ---------- Renderer / scene ----------
 const scene = new THREE.Scene();
@@ -330,7 +345,40 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys[e.code] = false);
 let locked = false;
 const menu = $('menu'), hud = $('hud'), msg = $('msg'), cross = $('cross'), hit = $('hit'), flash = $('flash');
-menu.addEventListener('click', () => { audio.start(); document.body.requestPointerLock(); });
+// Menu states: 'boot' on first load, 'paused' after Escape mid-run, 'over' once a run has ended.
+let over = null; // { win, kills, level } for the run that just ended, until the next jack-in
+const pad3 = n => String(n).padStart(3, '0');
+function setMenu(state) {
+  menu.dataset.state = state;
+  $('result').className = over ? (over.win ? 'on win' : 'on') : '';
+  $('cta').classList.toggle('on', state === 'paused');
+  pillsEl.classList.toggle('on', state === 'over' || (state === 'boot' && introDone));
+  if (state === 'paused') neoEl.textContent = 'SYSTEM PAUSED  //  THE LINK IS STILL OPEN';
+  if (state === 'over') {
+    $('resh').textContent = over.win ? 'YOU ARE THE ONE' : 'SYSTEM FAILURE';
+    $('resp').textContent = over.win
+      ? `THE CONSTRUCT HAS BEEN REBOOTED  //  ${pad3(over.kills)} PROGRAMS TERMINATED`
+      : `AGENTS TERMINATED: ${pad3(over.kills)}  //  REACHED LEVEL ${over.level} / ${MAX_LEVEL}`;
+    neoEl.textContent = over.win ? '\u201CThe door. You chose the door.\u201D' : '\u201CEverything that has a beginning has an end.\u201D';
+    $('redsub').textContent = over.win ? 'run it back // jack in again' : 'reinitialize // jack back in';
+  }
+}
+function jackIn() {
+  audio.start();
+  const p = document.body.requestPointerLock();
+  if (p && p.catch) p.catch(() => {}); // browsers refuse a re-lock right after Escape; the next click works
+}
+// End the run: keep the world running under the in-game panel for `delay` ms, then hand over to the menu.
+function endRun(info, delay) {
+  over = info;
+  setTimeout(() => { if (locked) document.exitPointerLock(); else setMenu('over'); }, delay);
+}
+menu.addEventListener('click', () => {
+  const s = menu.dataset.state;
+  if (s === 'paused') jackIn();
+  else if (s === 'boot' && !introDone) finishIntro();
+});
+$('pillRed').addEventListener('click', e => { e.stopPropagation(); jackIn(); });
 // Blue pill: wake up in your bed. A short dream sequence, then back to the choice.
 const wake = $('wake');
 const WAKE_LINES = ['Have you ever had a dream, Neo, that you were so sure was real?',
@@ -356,11 +404,12 @@ $('pillBlue').addEventListener('click', e => { e.stopPropagation(); audio.start(
 wake.addEventListener('click', () => { wakeSeq++; wake.style.display = 'none'; });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === document.body;
-  menu.classList.toggle('off', locked); hud.classList.add('on');
-  if (locked && (!alive || won)) { game.reset(); msg.classList.remove('on'); codeTarget = 0; }
-  if (locked) pendingIntro = true; // HUD was hidden when the level-start event fired
+  menu.classList.toggle('off', locked); hud.classList.toggle('on', locked);
+  if (locked) {
+    if (over) { game.reset(); over = null; }
+    msg.classList.remove('on'); lvl.classList.remove('on'); $('sub').classList.remove('on');
+  } else setMenu(over ? 'over' : 'paused');
 });
-let pendingIntro = false;
 document.addEventListener('mousemove', e => { if (locked) game.look(e.movementX, e.movementY); });
 
 // ---------- Shooting (hit detection in the core; visuals here) ----------
@@ -398,7 +447,7 @@ function showQuote(text) {
 const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789ABCDEFXZ';
 const rg = () => GLYPHS[Math.random()*GLYPHS.length|0];
 const code = $('code'), cg = code.getContext('2d');
-let codeCols = [], codeA = 0, codeTarget = 1; // rain runs behind the menu from the start
+let codeCols = [], codeA = 0, codeTarget = 1, rainWanted = 0; // rain always runs behind the menu; in-game only on level clear
 function sizeCode() {
   code.width = innerWidth; code.height = innerHeight;
   codeCols = Array.from({ length: Math.ceil(innerWidth/18) }, () => ({ y: -Math.random()*innerHeight, v: 4 + Math.random()*10 }));
@@ -435,25 +484,20 @@ function showLevelText(h, p, cls, hold) {
   lvlTimer = setTimeout(() => lvl.classList.remove('on'), hold);
 }
 function onLevelClear(level, kills) {
-  codeTarget = 1; bloom.strength = 2.4;
+  rainWanted = 1; bloom.strength = 2.4;
   showLevelText(`LEVEL ${level} CLEARED`, `ALL AGENTS TERMINATED  //  ${String(kills).padStart(3,'0')} TOTAL`, 'clear', 3600);
 }
 function onLevelStart(level) {
   const total = game.level_total(), pct = game.level_speed_pct();
-  codeTarget = 0;
+  rainWanted = 0;
   if (level >= MAX_LEVEL) { showLevelText('THE ARCHITECT', 'FINAL LEVEL  //  ONE PROGRAM  //  DELETE IT TO END THIS', 'clear', 4000); return; }
   const sub = level === 1 ? `${total} AGENTS DETECTED  //  TERMINATE ALL` : `${total} AGENTS  //  SPEED ${pct}%  //  TERMINATE ALL`;
   showLevelText(`LEVEL ${level} / ${MAX_LEVEL}`, sub, '', 3000);
 }
 function onWin(kills) {
-  codeTarget = 1; bloom.strength = 2.8;
-  showLevelText('ARCHITECT DELETED', `ALL ${MAX_LEVEL} LEVELS CLEARED  //  ${String(kills).padStart(3,'0')} PROGRAMS TERMINATED`, 'clear', 4500);
-  setTimeout(() => showQuote('The door, you chose the door.'), 4600);
-  setTimeout(() => {
-    $('msgh').textContent = 'YOU ARE THE ONE'; msg.className = 'panel on win';
-    $('final').textContent = 'THE CONSTRUCT HAS BEEN REBOOTED';
-    document.exitPointerLock();
-  }, 3000);
+  rainWanted = 1; bloom.strength = 2.8;
+  showLevelText('ARCHITECT DELETED', `ALL ${MAX_LEVEL} LEVELS CLEARED  //  ${pad3(kills)} PROGRAMS TERMINATED`, 'clear', 4200);
+  endRun({ win: true, kills, level: MAX_LEVEL }, 4800);
 }
 
 // ---------- Frame loop ----------
@@ -470,7 +514,8 @@ function animate() {
   const k = c => keys[c] ? 1 : 0;
   const fwd = locked ? k('ArrowUp') + k('KeyW') - k('ArrowDown') - k('KeyS') : 0;
   const right = locked ? k('ArrowRight') + k('KeyD') - k('ArrowLeft') - k('KeyA') : 0;
-  const ev = game.step(dt, fwd, right, !!(keys.ShiftLeft || keys.ShiftRight));
+  // The simulation only advances while the pointer is locked; the menu is a true pause.
+  const ev = locked ? game.step(dt, fwd, right, !!(keys.ShiftLeft || keys.ShiftRight)) : 0;
 
   // 2. read state
   const st = f32(game.state_ptr(), 16);
@@ -484,7 +529,7 @@ function animate() {
   if (ev & EV.LEVEL_CLEAR) { onLevelClear(level, kills); audio.play('levelClear'); }
   if (ev & EV.WIN) { onWin(kills); audio.play('win'); }
   won = clearing === 2;
-  if (ev & EV.LEVEL_START || pendingIntro) { onLevelStart(level); pendingIntro = false; audio.play('levelStart'); }
+  if (ev & EV.LEVEL_START) { onLevelStart(level); audio.play('levelStart'); }
   if (ev & EV.KILL) { audio.play('kill'); if (Math.random() < 0.35) showQuote(); }
   else if (ev & EV.HIT) audio.play('hit');
   if (ev & EV.DAMAGE) {
@@ -499,11 +544,12 @@ function animate() {
   if (ev & EV.DEATH) {
     audio.play('death');
     $('msgh').textContent = 'SYSTEM FAILURE'; msg.className = 'panel on';
-    $('final').textContent = `AGENTS TERMINATED: ${kills}  //  REACHED LEVEL ${level} / ${MAX_LEVEL}`;
-    document.exitPointerLock();
+    $('final').textContent = `AGENTS TERMINATED: ${pad3(kills)}  //  REACHED LEVEL ${level} / ${MAX_LEVEL}`;
+    endRun({ win: false, kills, level }, 2400);
   }
   flashA = Math.max(0, flashA - dt*2.5); flash.style.opacity = flashA;
   bloom.strength += (0.9 + (1 - timeScale) * 0.8 - bloom.strength) * Math.min(1, dt * 3);
+  codeTarget = locked ? rainWanted : 1;
   drawCode(dt); tickDecoders();
   audio.update({ level, timeScale, boss: level >= MAX_LEVEL && !clearing, paused: !locked, hp, alive, won });
 
