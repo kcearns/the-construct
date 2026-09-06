@@ -69,6 +69,8 @@
   #bossbar{height:6px;background:rgba(255,255,255,.1);border:1px solid rgba(234,255,240,.5);overflow:hidden}
   #bossbar b{display:block;height:100%;width:100%;background:#eafff0;box-shadow:0 0 12px #fff;transition:width .1s}
   #msg p{margin:6px 0;opacity:.85}
+  #audio{position:absolute;right:28px;bottom:28px;font-size:11px;letter-spacing:.3em;opacity:.45}
+  #audio.muted{color:var(--r);opacity:.8}
 
   /* Menu */
   #menu{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
@@ -107,12 +109,13 @@
   </div>
   <div id="lvl"><h2 id="lvlh"></h2><p id="lvlp"></p></div>
   <div class="panel" id="boss"><div class="lbl">THE ARCHITECT</div><div id="bossbar"><b id="bossfill"></b></div></div>
+  <div id="audio">M // AUDIO ON</div>
   <div class="panel" id="msg"><h2 id="msgh">SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
 </div>
 
 <div id="menu">
   <h1>THE CONSTRUCT</h1>
-  <div class="sub">LOADING PROGRAM // RUST + WASM CORE // THREE.JS RENDERER</div>
+  <div class="sub">RUST + WASM CORE // THREE.JS RENDERER // WEB AUDIO TECHNO</div>
   <div class="cols">
     <div>
       <h3>CONTROLS</h3>
@@ -122,6 +125,7 @@
         <span>CLICK</span><span>fire</span>
         <span>SHIFT</span><span>sprint</span>
         <span>ESC</span><span>pause</span>
+        <span>M</span><span>mute audio</span>
       </div>
     </div>
     <div class="how">
@@ -150,6 +154,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import init, { Game } from './pkg/matrix_core.js';
+import { createAudio } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const G = 0x00ff41, R = 0xff3b3b;
@@ -164,8 +169,13 @@ const EV = { LEVEL_CLEAR: 1, HIT: 2, KILL: 4, DEATH: 8, DAMAGE: 16, LEVEL_START:
 const ES = 8; // enemy buffer stride
 const MAX_LEVEL = game.max_level(), ARCH_HP = game.architect_hp_max();
 $('cta').textContent = 'CLICK TO JACK IN';
+// Procedural techno soundtrack + SFX (site/audio.js). Starts on the first click.
+const audio = createAudio();
+const audioInd = $('audio');
+function showMute() { audioInd.textContent = audio.muted ? 'M // AUDIO MUTED' : 'M // AUDIO ON'; audioInd.classList.toggle('muted', audio.muted); }
+showMute();
 // Debug handle for the devtools console: window.__construct.game.step(...) etc.
-window.__construct = { game, wasm, hud: () => $('hud').classList.add('on'), clear: () => onLevelClear(1, 3), start: () => onLevelStart(2), win: () => onWin(88), level: n => { game.jump_to_level(n); pendingIntro = true; } };
+window.__construct = { game, wasm, audio, hud: () => $('hud').classList.add('on'), clear: () => onLevelClear(1, 3), start: () => onLevelStart(2), win: () => onWin(88), level: n => { game.jump_to_level(n); pendingIntro = true; } };
 
 // ---------- Renderer / scene ----------
 const scene = new THREE.Scene();
@@ -277,11 +287,14 @@ particles.count = 0; particles.frustumCulled = false; scene.add(particles);
 
 // ---------- Input ----------
 const keys = {};
-addEventListener('keydown', e => { keys[e.code] = true; if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); });
+addEventListener('keydown', e => {
+  keys[e.code] = true; if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+  if (e.code === 'KeyM' && !e.repeat) { audio.toggleMute(); showMute(); }
+});
 addEventListener('keyup', e => keys[e.code] = false);
 let locked = false;
 const menu = $('menu'), hud = $('hud'), msg = $('msg'), cross = $('cross'), hit = $('hit'), flash = $('flash');
-menu.addEventListener('click', () => document.body.requestPointerLock());
+menu.addEventListener('click', () => { audio.start(); document.body.requestPointerLock(); });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === document.body;
   menu.classList.toggle('off', locked); hud.classList.add('on');
@@ -296,6 +309,7 @@ const tracers = [];
 let recoil = 0, shake = 0, alive = true, won = false;
 addEventListener('mousedown', e => {
   if (!locked || e.button !== 0 || !game.fire()) return;
+  audio.play('fire');
   recoil = 1; shake = 0.4;
   cross.classList.add('kick'); setTimeout(() => cross.classList.remove('kick'), 80);
   muzzle.intensity = 30; muzzleFlash.material.opacity = 1; muzzleFlash.material.rotation = Math.random()*6;
@@ -372,6 +386,7 @@ function onWin(kills) {
 const clock = new THREE.Clock();
 const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), v1 = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
 let flashA = 0;
+const prevAge = new Float32Array(game.max_enemies()); let prevN = 0;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -392,13 +407,16 @@ function animate() {
   keyLight.position.set(px, 12, pz);
 
   // 3. events
-  if (ev & EV.LEVEL_CLEAR) onLevelClear(level, kills);
-  if (ev & EV.WIN) onWin(kills);
+  if (ev & EV.LEVEL_CLEAR) { onLevelClear(level, kills); audio.play('levelClear'); }
+  if (ev & EV.WIN) { onWin(kills); audio.play('win'); }
   won = clearing === 2;
-  if (ev & EV.LEVEL_START || pendingIntro) { onLevelStart(level); pendingIntro = false; }
+  if (ev & EV.LEVEL_START || pendingIntro) { onLevelStart(level); pendingIntro = false; audio.play('levelStart'); }
+  if (ev & EV.KILL) audio.play('kill'); else if (ev & EV.HIT) audio.play('hit');
+  if (ev & EV.DAMAGE) audio.play('damage');
   if (ev & EV.HIT) { hit.classList.remove('show'); void hit.offsetWidth; hit.classList.add('show'); }
   if (ev & EV.DAMAGE) flashA = 1;
   if (ev & EV.DEATH) {
+    audio.play('death');
     $('msgh').textContent = 'SYSTEM FAILURE'; msg.className = 'panel on';
     $('final').textContent = `AGENTS TERMINATED: ${kills}  //  REACHED LEVEL ${level} / ${MAX_LEVEL}`;
     document.exitPointerLock();
@@ -406,6 +424,7 @@ function animate() {
   flashA = Math.max(0, flashA - dt*2.5); flash.style.opacity = flashA;
   bloom.strength += (0.9 + (1 - timeScale) * 0.8 - bloom.strength) * Math.min(1, dt * 3);
   drawCode(dt); tickDecoders();
+  audio.update({ level, timeScale, boss: level >= MAX_LEVEL && !clearing, paused: !locked, hp, alive, won });
 
   // 4. weapon feel
   recoil = Math.max(0, recoil - dt*10); shake = Math.max(0, shake - dt*4);
@@ -422,6 +441,7 @@ function animate() {
   const n = game.enemy_count(), eb = f32(game.enemies_ptr(), n*ES);
   let bossHp = -1;
   architect.visible = false;
+  let spawned = 0, blinked = 0;
   for (let i = 0; i < enemyPool.length; i++) {
     const isArch = i < n && eb[i*ES+7] > 0.5;
     const g = isArch ? architect : enemyPool[i];
@@ -429,6 +449,9 @@ function animate() {
     g.visible = i < n; if (!g.visible) continue;
     const o = i*ES, age = eb[o+6], base = isArch ? 1.6 : 1;
     if (isArch) bossHp = eb[o+5];
+    // age resets to 0 when a program materializes (spawn, or the Architect phase-shifting)
+    if (age < 0.05 && (i >= prevN || age < prevAge[i])) { if (isArch) blinked++; else spawned++; }
+    prevAge[i] = age;
     g.position.set(eb[o], eb[o+1], eb[o+2]); g.rotation.y = eb[o+3];
     if (age < 0.7) { // materializing: flicker in and stretch up from the floor
       const k = age / 0.7;
@@ -441,6 +464,8 @@ function animate() {
     }
     if (isArch) g.userData.halo.rotation.z = t*1.5;
   }
+  prevN = n;
+  if (blinked) audio.play('blink'); else if (spawned) audio.play('spawn');
   $('boss').classList.toggle('on', bossHp >= 0 && !won);
   if (bossHp >= 0) $('bossfill').style.width = (bossHp / ARCH_HP * 100) + '%';
 
