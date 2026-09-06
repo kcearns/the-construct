@@ -5,11 +5,33 @@ written in Rust and compiled to WebAssembly; three.js renders it.
 
 **Play it:** https://the-construct.kevin-128.workers.dev
 
-Arrow keys or WASD to move, mouse to look, click to fire, shift to sprint.
+## How to play
 
-Ten levels. Terminate every agent to clear a level; each one sends more
-agents, faster. Level 10 is the Architect, a single far more resilient
-program that phase-shifts around you. Delete it to win.
+Click the start screen to jack in. The page grabs your mouse; press Escape
+to release it and pause.
+
+| Key | Action |
+|-----|--------|
+| Arrow keys or WASD | move |
+| Mouse | look |
+| Left click | fire |
+| Shift | sprint |
+| Escape | pause / release mouse |
+
+1. **Ten levels.** Terminate every agent to clear a level. The panel in the
+   top right tracks agents cleared for the current level.
+2. **Each level sends more agents, faster.** Agents take two hits; tougher
+   ones with extra hit points appear from level 5 on. New agents flicker in
+   over a moment and can't move or hurt you until they've materialized.
+3. **Agents drain your integrity on contact.** The bar in the bottom left
+   is your health. At zero, the system fails and you restart from level 1.
+4. **Level 10 is the Architect.** One program, far more resilient, that hits
+   harder and phase-shifts to a new position around you every few seconds.
+   A health bar for it appears at the top of the screen. Delete it to win.
+
+Buildings block shots as well as movement. Clearing a level drops the world
+into bullet time for a few seconds while the next level loads; you keep
+moving at full speed.
 
 ## Layout
 
