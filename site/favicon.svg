@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- THE CONSTRUCT: the HUD crosshair, Matrix green on black -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#03140a"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#bg)"/>
+  <!-- panel corner brackets, like the HUD panels -->
+  <path d="M10 22V10h12M42 10h12v12M54 42v12H42M22 54H10V42" fill="none" stroke="#00a32a" stroke-width="2.5" stroke-linecap="square"/>
+  <!-- crosshair -->
+  <g stroke="#00ff41" stroke-width="4" stroke-linecap="butt" filter="url(#glow)">
+    <path d="M32 16v10M32 38v10M16 32h10M38 32h10"/>
+  </g>
+  <circle cx="32" cy="32" r="2.6" fill="#eafff0" filter="url(#glow)"/>
+</svg>
