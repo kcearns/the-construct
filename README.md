@@ -49,19 +49,14 @@ any change to `core/src/lib.rs`.
 
 ## Run locally
 
-Any static file server that serves `.wasm` with the `application/wasm`
-content type works. Two options:
-
 ```sh
-# Option 1: Python, no install
-python3 -m http.server 8765 -d site
-# open http://localhost:8765/
-
-# Option 2: wrangler, matches the production environment
 npm install
 npm run dev
 # open the URL wrangler prints, usually http://localhost:8787/
 ```
+
+This runs `wrangler dev`, which serves `site/` through the same Workers
+runtime used in production, so what you see locally is what deploys.
 
 Opening `site/index.html` directly from the filesystem will not work because
 browsers block WASM and ES module loading over `file://`.
