@@ -7,8 +7,11 @@ written in Rust and compiled to WebAssembly; three.js renders it.
 
 ## How to play
 
-Click the start screen to jack in. The page grabs your mouse; press Escape
-to release it and pause.
+Click the start screen to jack in. The menu plays the "Wake up, Neo…" intro
+before offering a choice: take the red pill to jack in, or take the blue pill
+to wake up in your bed and believe whatever you want to believe (it drops you
+into the dream sequence, then back to the choice). The page grabs your mouse;
+press Escape to release it and pause.
 
 | Key | Action |
 |-----|--------|
@@ -37,7 +40,9 @@ remembered.
 
 Buildings block shots as well as movement. Clearing a level drops the world
 into bullet time for a few seconds while the next level loads; you keep
-moving at full speed.
+moving at full speed. Taking damage glitches the screen; occasionally the
+system answers a kill with one of its one-liners as a subtitle ("There is no
+spoon.", "Dodge this.", …).
 
 ## Layout
 
