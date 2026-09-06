@@ -1,0 +1,13 @@
+# Security headers for Cloudflare static assets (also honored by `wrangler dev`).
+# Scripts may only come from this origin and the pinned three.js CDN, styles from
+# this origin and Google Fonts, and the page may make no network requests beyond
+# loading its own files. 'wasm-unsafe-eval' is what lets the browser compile the
+# game core; 'unsafe-inline' covers the import map and the module script in
+# index.html. Nothing may embed the site in a frame.
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data: blob:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
