@@ -1,5 +1,5 @@
 //! Game core for THE CONSTRUCT. Owns all simulation state: world generation,
-//! player movement and collision, enemy AI, hit detection, waves, particles,
+//! player movement and collision, enemy AI, hit detection, levels, particles,
 //! and the digital rain. The JS side is a pure renderer that reads the flat
 //! f32 buffers exposed here directly from WASM linear memory.
 
@@ -16,11 +16,19 @@ const FIRE_COOLDOWN: f32 = 0.11;
 const RANGE: f32 = 120.0;
 
 // Event bits returned from `step()`.
-pub const EV_WAVE: u32 = 1;
+pub const EV_LEVEL_CLEAR: u32 = 1;
 pub const EV_HIT: u32 = 2;
 pub const EV_KILL: u32 = 4;
 pub const EV_DEATH: u32 = 8;
 pub const EV_DAMAGE: u32 = 16;
+pub const EV_LEVEL_START: u32 = 32;
+
+/// Seconds the level-clear sequence lasts before the next level loads.
+pub const CLEAR_DURATION: f32 = 5.0;
+/// Bullet-time factor at the start of a level-clear sequence.
+const CLEAR_SLOWMO: f32 = 0.12;
+/// Seconds an agent takes to materialize after spawning (no move, no damage).
+const MATERIALIZE: f32 = 0.7;
 
 // Shot kinds written to shot_buf[0].
 const SHOT_MISS: f32 = 0.0;
@@ -30,7 +38,7 @@ const SHOT_ENEMY: f32 = 2.0;
 // Per-item stride of each output buffer (floats).
 pub const BLOCK_STRIDE: usize = 6; // cx cy cz w h d
 pub const RAIN_STRIDE: usize = 3; // x y z
-pub const ENEMY_STRIDE: usize = 6; // x y z yaw hit_t hp
+pub const ENEMY_STRIDE: usize = 7; // x y z yaw hit_t hp age
 pub const PARTICLE_STRIDE: usize = 4; // x y z life
 
 struct Rng(u64);
@@ -105,6 +113,30 @@ struct Enemy {
     hit_t: f32,
     speed: f32,
     phase: f32,
+    age: f32,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Phase {
+    Playing,
+    Clear,
+}
+
+/// Difficulty curve for a level.
+struct LevelParams {
+    total: u32,
+    max_active: u32,
+    speed: f32,
+    hp: i32,
+}
+fn level_params(level: u32) -> LevelParams {
+    let n = level.max(1) - 1;
+    LevelParams {
+        total: (3 + n * 2).min(24),
+        max_active: (2 + level).min(12).min(3 + n * 2),
+        speed: (2.2 + n as f32 * 0.45).min(9.0),
+        hp: 2 + (n / 4) as i32,
+    }
 }
 
 struct Particle {
@@ -147,12 +179,17 @@ pub struct Game {
 
     // progression
     kills: u32,
-    wave: u32,
-    wave_kills: u32,
+    level: u32,
+    level_spawned: u32,
+    level_killed: u32,
+    phase: Phase,
+    phase_t: f32,
+    time_scale: f32,
 
     events: u32,
-    // [px py pz yaw pitch hp kills wave alive active bob moving]
-    state_buf: [f32; 12],
+    // [px py pz yaw pitch hp kills level alive active bob moving
+    //  level_total level_killed time_scale phase]
+    state_buf: [f32; 16],
     // [kind ex ey ez]
     shot_buf: [f32; 4],
 }
@@ -183,10 +220,14 @@ impl Game {
             alive: true,
             last_fire: -1.0,
             kills: 0,
-            wave: 1,
-            wave_kills: 0,
+            level: 1,
+            level_spawned: 0,
+            level_killed: 0,
+            phase: Phase::Playing,
+            phase_t: 0.0,
+            time_scale: 1.0,
             events: 0,
-            state_buf: [0.0; 12],
+            state_buf: [0.0; 16],
             shot_buf: [0.0; 4],
         };
         g.gen_world();
@@ -207,14 +248,18 @@ impl Game {
         self.hp = 100.0;
         self.alive = true;
         self.kills = 0;
-        self.wave = 1;
-        self.wave_kills = 0;
+        self.level = 1;
         self.last_fire = -1.0;
-        for _ in 0..6 {
-            self.spawn_enemy();
-        }
-        self.events = EV_WAVE;
+        self.events = 0;
+        self.start_level();
         self.pack();
+    }
+
+    /// Current level's agent count, for the HUD / level intro.
+    pub fn level_total(&self) -> u32 { level_params(self.level).total }
+    /// Speed of this level's agents relative to level 1, as a percentage.
+    pub fn level_speed_pct(&self) -> u32 {
+        (level_params(self.level).speed / level_params(1).speed * 100.0).round() as u32
     }
 
     /// Mouse look. dx/dy are raw pointer-lock movement deltas in pixels.
@@ -269,15 +314,15 @@ impl Game {
                     self.enemies.swap_remove(i);
                     self.burst(at);
                     self.kills += 1;
-                    self.wave_kills += 1;
+                    self.level_killed += 1;
                     self.events |= EV_KILL;
-                    self.spawn_enemy();
-                    if self.wave_kills >= 5 + self.wave * 2 {
-                        self.wave += 1;
-                        self.wave_kills = 0;
+                    let lp = level_params(self.level);
+                    if self.level_killed >= lp.total {
+                        self.phase = Phase::Clear;
+                        self.phase_t = 0.0;
+                        self.events |= EV_LEVEL_CLEAR;
+                    } else if self.level_spawned < lp.total {
                         self.spawn_enemy();
-                        self.spawn_enemy();
-                        self.events |= EV_WAVE;
                     }
                 }
             }
@@ -294,11 +339,29 @@ impl Game {
     pub fn step(&mut self, dt: f32, fwd: f32, right: f32, sprint: bool) -> u32 {
         let dt = dt.min(0.05).max(0.0);
         self.time += dt;
+        self.phase_t += dt;
+
+        // Level-clear sequence: bullet time that eases back to normal, then
+        // the next level loads.
+        self.time_scale = match self.phase {
+            Phase::Playing => 1.0,
+            Phase::Clear => {
+                if self.phase_t >= CLEAR_DURATION {
+                    self.level += 1;
+                    self.start_level();
+                    1.0
+                } else {
+                    let k = ((self.phase_t - 1.5) / 1.5).clamp(0.0, 1.0);
+                    CLEAR_SLOWMO + (1.0 - CLEAR_SLOWMO) * k * k
+                }
+            }
+        };
+        let wdt = dt * self.time_scale; // world time; the player moves in real time
 
         self.move_player(dt, fwd, right, sprint);
-        self.update_rain(dt);
-        self.update_enemies(dt);
-        self.update_particles(dt);
+        self.update_rain(wdt);
+        self.update_enemies(wdt);
+        self.update_particles(wdt);
 
         if self.hp <= 0.0 && self.alive {
             self.hp = 0.0;
@@ -364,22 +427,37 @@ impl Game {
         }
     }
 
+    fn start_level(&mut self) {
+        self.enemies.clear();
+        self.level_spawned = 0;
+        self.level_killed = 0;
+        self.phase = Phase::Playing;
+        self.phase_t = 0.0;
+        for _ in 0..level_params(self.level).max_active {
+            self.spawn_enemy();
+        }
+        self.events |= EV_LEVEL_START;
+    }
+
     fn spawn_enemy(&mut self) {
-        if self.enemies.len() >= MAX_ENEMIES {
+        let lp = level_params(self.level);
+        if self.enemies.len() >= MAX_ENEMIES || self.level_spawned >= lp.total {
             return;
         }
+        self.level_spawned += 1;
         let a = self.rng.range(0.0, core::f32::consts::TAU);
-        let r = self.rng.range(28.0, 58.0);
-        let speed = 3.5 + self.wave as f32 * 0.35 + self.rng.f();
+        let r = self.rng.range(24.0, 50.0);
+        let speed = lp.speed * self.rng.range(0.9, 1.15);
         self.enemies.push(Enemy {
-            x: self.px + a.cos() * r,
+            x: (self.px + a.cos() * r).clamp(-HALF, HALF),
             y: 0.0,
-            z: self.pz + a.sin() * r,
+            z: (self.pz + a.sin() * r).clamp(-HALF, HALF),
             yaw: 0.0,
-            hp: 2,
+            hp: lp.hp,
             hit_t: 0.0,
             speed,
             phase: self.rng.range(0.0, 6.28),
+            age: 0.0,
         });
     }
 
@@ -460,14 +538,18 @@ impl Game {
             let (tx, tz) = (self.px - e.x, self.pz - e.z);
             let d = tx.hypot(tz);
             e.yaw = tx.atan2(tz);
+            e.age += dt;
+            e.hit_t = (e.hit_t - dt).max(0.0);
+            e.y = (t * 5.0 + e.phase).sin() * 0.06;
+            if e.age < MATERIALIZE {
+                continue;
+            }
             if d > 1.6 {
                 e.x += tx / d * e.speed * dt;
                 e.z += tz / d * e.speed * dt;
             } else {
                 touching = true;
             }
-            e.y = (t * 5.0 + e.phase).sin() * 0.06;
-            e.hit_t = (e.hit_t - dt).max(0.0);
         }
         if touching && self.alive {
             self.hp -= 22.0 * dt;
@@ -496,7 +578,7 @@ impl Game {
         for (i, e) in self.enemies.iter().enumerate() {
             let o = i * ENEMY_STRIDE;
             self.enemy_buf[o..o + ENEMY_STRIDE]
-                .copy_from_slice(&[e.x, e.y, e.z, e.yaw, e.hit_t, e.hp as f32]);
+                .copy_from_slice(&[e.x, e.y, e.z, e.yaw, e.hit_t, e.hp as f32, e.age]);
         }
         for (i, p) in self.particles.iter().enumerate() {
             let o = i * PARTICLE_STRIDE;
@@ -505,9 +587,11 @@ impl Game {
         let py = EYE + self.bob.sin() * 0.035 * self.moving;
         self.state_buf = [
             self.px, py, self.pz, self.yaw, self.pitch,
-            self.hp, self.kills as f32, self.wave as f32,
+            self.hp, self.kills as f32, self.level as f32,
             if self.alive { 1.0 } else { 0.0 },
             self.enemies.len() as f32, self.bob, self.moving,
+            level_params(self.level).total as f32, self.level_killed as f32,
+            self.time_scale, if self.phase == Phase::Clear { 1.0 } else { 0.0 },
         ];
     }
 }
@@ -562,7 +646,8 @@ mod tests {
         let mut g = Game::new(3);
         g.enemies.clear();
         // yaw 0 looks down -Z; put an agent 10 units ahead.
-        g.enemies.push(Enemy { x: 0.0, y: 0.0, z: -10.0, yaw: 0.0, hp: 2, hit_t: 0.0, speed: 0.0, phase: 0.0 });
+        g.enemies.push(Enemy { x: 0.0, y: 0.0, z: -10.0, yaw: 0.0, hp: 2, hit_t: 0.0, speed: 0.0, phase: 0.0, age: 1.0 });
+        g.level_spawned = 1;
         assert!(g.fire());
         assert_eq!(g.shot_buf[0], SHOT_ENEMY);
         assert!(!g.fire(), "cooldown should block an immediate second shot");
@@ -574,6 +659,40 @@ mod tests {
         assert!(ev & EV_KILL != 0);
         assert_eq!(g.kills, 1);
         assert!(!g.particles.is_empty());
+    }
+
+    #[test]
+    fn levels_escalate_after_a_clear_sequence() {
+        let mut g = Game::new(11);
+        let ev = g.step(0.016, 0.0, 0.0, false);
+        assert!(ev & EV_LEVEL_START != 0, "level 1 start is announced on the first step");
+        assert_eq!(g.level, 1);
+        assert_eq!(g.enemies.len(), 3, "level 1 starts with three agents");
+        let l1 = level_params(1);
+        let l2 = level_params(2);
+        assert!(l2.total > l1.total && l2.speed > l1.speed);
+
+        // Wipe level 1 by hand and observe the clear sequence.
+        g.enemies.clear();
+        g.level_killed = l1.total;
+        g.phase = Phase::Clear;
+        g.phase_t = 0.0;
+        let ev = g.step(0.016, 0.0, 0.0, false);
+        assert!(ev & EV_LEVEL_START == 0);
+        assert!(g.time_scale < 0.2, "bullet time at start of clear");
+        let mut started = 0;
+        let mut steps = 0;
+        while steps < 400 {
+            started |= g.step(0.05, 0.0, 0.0, false) & EV_LEVEL_START;
+            steps += 1;
+            if started != 0 {
+                break;
+            }
+        }
+        assert!(started != 0, "next level should start after CLEAR_DURATION");
+        assert_eq!(g.level, 2);
+        assert_eq!(g.enemies.len() as u32, l2.max_active);
+        assert!((g.time_scale - 1.0).abs() < 1e-6);
     }
 
     #[test]

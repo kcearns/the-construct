@@ -49,6 +49,22 @@ export class Game {
         return ret !== 0;
     }
     /**
+     * Speed of this level's agents relative to level 1, as a percentage.
+     * @returns {number}
+     */
+    level_speed_pct() {
+        const ret = wasm.game_level_speed_pct(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Current level's agent count, for the HUD / level intro.
+     * @returns {number}
+     */
+    level_total() {
+        const ret = wasm.game_level_total(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Mouse look. dx/dy are raw pointer-lock movement deltas in pixels.
      * @param {number} dx
      * @param {number} dy

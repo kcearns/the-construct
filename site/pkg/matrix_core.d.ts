@@ -14,6 +14,14 @@ export class Game {
      */
     fire(): boolean;
     /**
+     * Speed of this level's agents relative to level 1, as a percentage.
+     */
+    level_speed_pct(): number;
+    /**
+     * Current level's agent count, for the HUD / level intro.
+     */
+    level_total(): number;
+    /**
      * Mouse look. dx/dy are raw pointer-lock movement deltas in pixels.
      */
     look(dx: number, dy: number): void;
@@ -48,6 +56,8 @@ export interface InitOutput {
     readonly game_enemies_ptr: (a: number) => number;
     readonly game_enemy_count: (a: number) => number;
     readonly game_fire: (a: number) => number;
+    readonly game_level_speed_pct: (a: number) => number;
+    readonly game_level_total: (a: number) => number;
     readonly game_look: (a: number, b: number, c: number) => void;
     readonly game_max_enemies: (a: number) => number;
     readonly game_max_particles: (a: number) => number;
