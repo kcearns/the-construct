@@ -74,7 +74,7 @@
 
   /* Menu */
   #menu{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
-    background:radial-gradient(ellipse at center,rgba(0,30,8,.85),rgba(0,0,0,.95));cursor:pointer;transition:opacity .5s}
+    background:radial-gradient(ellipse at center,rgba(0,30,8,.6),rgba(0,0,0,.82));cursor:pointer;transition:opacity .5s}
   #menu.off{opacity:0;pointer-events:none}
   #menu h1{margin:0;font-size:clamp(40px,8vw,88px);letter-spacing:.3em;font-weight:400;text-shadow:0 0 20px var(--g),0 0 60px rgba(0,255,65,.4);animation:flk 4s infinite}
   @keyframes flk{0%,92%,100%{opacity:1}93%{opacity:.5}95%{opacity:1}97%{opacity:.6}}
@@ -88,6 +88,24 @@
   #menu .how ol{margin:0;padding-left:18px}
   #menu .cta{margin-top:10px;padding:12px 34px;border:1px solid var(--g);letter-spacing:.3em;font-size:14px;animation:pulse 1.6s infinite}
   @keyframes pulse{50%{box-shadow:0 0 18px rgba(0,255,65,.6);background:rgba(0,255,65,.08)}}
+  #neo{min-height:22px;font-size:15px;letter-spacing:.18em;opacity:.9;text-shadow:0 0 10px var(--g)}
+  #pills{display:flex;gap:44px;flex-wrap:wrap;justify-content:center}
+  .pill{display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;padding:16px 24px;border:1px solid transparent;transition:.2s;letter-spacing:.25em;font-size:12px}
+  .pill:hover{border-color:currentColor;box-shadow:0 0 18px -4px currentColor}
+  .pill .orb{width:32px;height:32px;border-radius:50%;box-shadow:0 0 22px currentColor}
+  .pill.red{color:var(--r)} .pill.red .orb{background:radial-gradient(circle at 35% 30%,#ffb0b0,#ff3b3b 55%,#6e0d0d)}
+  .pill.blue{color:#6aa8ff} .pill.blue .orb{background:radial-gradient(circle at 35% 30%,#cfe2ff,#6aa8ff 55%,#16386e)}
+  .pill small{opacity:.55;letter-spacing:.12em;font-size:10px}
+  #wake{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;gap:34px;
+    background:#000;padding:0 10vw;text-align:center;font-size:clamp(16px,2.2vw,24px);letter-spacing:.12em;line-height:2;color:var(--g);text-shadow:0 0 12px var(--g);cursor:pointer;white-space:pre-line}
+  #wake .hint{font-size:11px;letter-spacing:.35em;opacity:.4;text-shadow:none}
+  /* in-game subtitles: program one-liners */
+  #sub{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);max-width:70vw;text-align:center;font-size:16px;letter-spacing:.18em;
+    font-style:italic;color:#d6ffe2;text-shadow:0 0 10px var(--g);opacity:0;transition:opacity .5s}
+  #sub.on{opacity:.95}
+  /* glitch shake when the system hits back */
+  @keyframes glitch{0%{transform:translate(0)}20%{transform:translate(-6px,2px) skewX(-2deg)}40%{transform:translate(5px,-2px) skewX(2deg)}60%{transform:translate(-3px,1px)}80%{transform:translate(3px,-1px) skewX(-1deg)}100%{transform:translate(0)}}
+  body.glitch #crt,body.glitch #vig,body.glitch canvas{animation:glitch .28s steps(2)}
 </style>
 </head>
 <body>
@@ -108,6 +126,7 @@
     <div id="prog"><b id="progbar"></b></div>
   </div>
   <div id="lvl"><h2 id="lvlh"></h2><p id="lvlp"></p></div>
+  <div id="sub"></div>
   <div class="panel" id="boss"><div class="lbl">THE ARCHITECT</div><div id="bossbar"><b id="bossfill"></b></div></div>
   <div id="audio">M // AUDIO ON</div>
   <div class="panel" id="msg"><h2 id="msgh">SYSTEM FAILURE</h2><p id="final"></p><p style="opacity:.6">click to reinitialize</p></div>
@@ -138,8 +157,14 @@
       </ol>
     </div>
   </div>
-  <div class="cta" id="cta">COMPILING CORE…</div>
+  <div id="neo"></div>
+  <div id="pills">
+    <div class="pill red" id="pillRed"><div class="orb"></div>TAKE THE RED PILL<small>stay in the construct // jack in</small></div>
+    <div class="pill blue" id="pillBlue"><div class="orb"></div>TAKE THE BLUE PILL<small>wake up and believe whatever you want</small></div>
+  </div>
 </div>
+
+<div id="wake"><div id="waketext"></div><div class="hint">CLICK TO OPEN YOUR EYES</div></div>
 
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -168,7 +193,18 @@ const f32 = (ptr, len) => new Float32Array(wasm.memory.buffer, ptr, len);
 const EV = { LEVEL_CLEAR: 1, HIT: 2, KILL: 4, DEATH: 8, DAMAGE: 16, LEVEL_START: 32, WIN: 64 };
 const ES = 8; // enemy buffer stride
 const MAX_LEVEL = game.max_level(), ARCH_HP = game.architect_hp_max();
-$('cta').textContent = 'CLICK TO JACK IN';
+// Neo typewriter intro, then the pill choice fades in.
+const NEO_LINES = ['Wake up, Neo...', 'The Matrix has you...', 'Follow the white rabbit.'];
+const neoEl = $('neo'), pillsEl = $('pills');
+pillsEl.style.opacity = '0'; pillsEl.style.transition = 'opacity .8s';
+(function typeNeo(i) {
+  if (i >= NEO_LINES.length) { neoEl.textContent = 'Knock, knock, Neo.'; pillsEl.style.opacity = '1'; return; }
+  const line = NEO_LINES[i]; let j = 0;
+  const iv = setInterval(() => {
+    neoEl.textContent = line.slice(0, ++j);
+    if (j >= line.length) { clearInterval(iv); setTimeout(() => typeNeo(i + 1), 650); }
+  }, 34);
+})(0);
 // Procedural techno soundtrack + SFX (site/audio.js). Starts on the first click.
 const audio = createAudio();
 const audioInd = $('audio');
@@ -295,6 +331,29 @@ addEventListener('keyup', e => keys[e.code] = false);
 let locked = false;
 const menu = $('menu'), hud = $('hud'), msg = $('msg'), cross = $('cross'), hit = $('hit'), flash = $('flash');
 menu.addEventListener('click', () => { audio.start(); document.body.requestPointerLock(); });
+// Blue pill: wake up in your bed. A short dream sequence, then back to the choice.
+const wake = $('wake');
+const WAKE_LINES = ['Have you ever had a dream, Neo, that you were so sure was real?',
+  'What if you were unable to wake from that dream?',
+  'How would you know the difference between the dream world and the real world?'];
+let wakeSeq = 0; // token so overlapping runs cancel
+function showWake() {
+  wake.style.display = 'flex';
+  const el = $('waketext'); el.textContent = '';
+  const token = ++wakeSeq;
+  (function line(i) {
+    if (token !== wakeSeq) return;
+    if (i >= WAKE_LINES.length) { setTimeout(() => { if (token === wakeSeq) wake.style.display = 'none'; }, 2800); return; }
+    const text = WAKE_LINES[i]; let j = 0;
+    const iv = setInterval(() => {
+      if (token !== wakeSeq) { clearInterval(iv); return; }
+      el.textContent = WAKE_LINES.slice(0, i).join('\n') + (i ? '\n' : '') + text.slice(0, ++j);
+      if (j >= text.length) { clearInterval(iv); setTimeout(() => line(i + 1), 800); }
+    }, 26);
+  })(0);
+}
+$('pillBlue').addEventListener('click', e => { e.stopPropagation(); audio.start(); showWake(); });
+wake.addEventListener('click', () => { wakeSeq++; wake.style.display = 'none'; });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === document.body;
   menu.classList.toggle('off', locked); hud.classList.add('on');
@@ -321,11 +380,25 @@ addEventListener('mousedown', e => {
   scene.add(line); tracers.push(line);
 });
 
+// Iconic one-liners, shown as subtitles on kills and at the end.
+const QUOTES = ['There is no spoon.', 'I know kung fu.', 'Dodge this.', 'Mr. Anderson...',
+  'Never send a human to do a machine\'s job.', 'He is beginning to believe.',
+  'Don\'t think you are. Know you are.', 'What is real? How do you define real?',
+  'Do you hear that, Mr. Anderson? That is the sound of inevitability.',
+  'You take the red pill, you stay in Wonderland, and I show you how deep the rabbit hole goes.'];
+let subTimer = 0;
+function showQuote(text) {
+  const el = $('sub');
+  el.textContent = '\u201C' + (text || QUOTES[Math.random() * QUOTES.length | 0]) + '\u201D';
+  el.classList.add('on');
+  clearTimeout(subTimer); subTimer = setTimeout(() => el.classList.remove('on'), 2400);
+}
+
 // ---------- Level sequence: code-rain overlay + decoding text ----------
 const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789ABCDEFXZ';
 const rg = () => GLYPHS[Math.random()*GLYPHS.length|0];
 const code = $('code'), cg = code.getContext('2d');
-let codeCols = [], codeA = 0, codeTarget = 0;
+let codeCols = [], codeA = 0, codeTarget = 1; // rain runs behind the menu from the start
 function sizeCode() {
   code.width = innerWidth; code.height = innerHeight;
   codeCols = Array.from({ length: Math.ceil(innerWidth/18) }, () => ({ y: -Math.random()*innerHeight, v: 4 + Math.random()*10 }));
@@ -375,6 +448,7 @@ function onLevelStart(level) {
 function onWin(kills) {
   codeTarget = 1; bloom.strength = 2.8;
   showLevelText('ARCHITECT DELETED', `ALL ${MAX_LEVEL} LEVELS CLEARED  //  ${String(kills).padStart(3,'0')} PROGRAMS TERMINATED`, 'clear', 4500);
+  setTimeout(() => showQuote('The door, you chose the door.'), 4600);
   setTimeout(() => {
     $('msgh').textContent = 'YOU ARE THE ONE'; msg.className = 'panel on win';
     $('final').textContent = 'THE CONSTRUCT HAS BEEN REBOOTED';
@@ -411,8 +485,15 @@ function animate() {
   if (ev & EV.WIN) { onWin(kills); audio.play('win'); }
   won = clearing === 2;
   if (ev & EV.LEVEL_START || pendingIntro) { onLevelStart(level); pendingIntro = false; audio.play('levelStart'); }
-  if (ev & EV.KILL) audio.play('kill'); else if (ev & EV.HIT) audio.play('hit');
-  if (ev & EV.DAMAGE) audio.play('damage');
+  if (ev & EV.KILL) { audio.play('kill'); if (Math.random() < 0.35) showQuote(); }
+  else if (ev & EV.HIT) audio.play('hit');
+  if (ev & EV.DAMAGE) {
+    audio.play('damage');
+    // the system hits back: brief glitch shake
+    document.body.classList.remove('glitch'); void document.body.offsetWidth;
+    document.body.classList.add('glitch');
+    setTimeout(() => document.body.classList.remove('glitch'), 320);
+  }
   if (ev & EV.HIT) { hit.classList.remove('show'); void hit.offsetWidth; hit.classList.add('show'); }
   if (ev & EV.DAMAGE) flashA = 1;
   if (ev & EV.DEATH) {
