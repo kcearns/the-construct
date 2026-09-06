@@ -1,0 +1,12 @@
+{
+  "name": "the-construct",
+  "private": true,
+  "scripts": {
+    "build": "./build.sh",
+    "dev": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.129.0"
+  }
+}

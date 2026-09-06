@@ -1,1 +1,3 @@
 core/target/
+node_modules/
+.wrangler/
