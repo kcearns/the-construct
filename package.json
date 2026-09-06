@@ -2,7 +2,7 @@
   "name": "the-construct",
   "private": true,
   "scripts": {
-    "build": "./build.sh",
+    "build": "node build.mjs",
     "dev": "wrangler dev",
     "deploy": "npm run build && wrangler deploy"
   },
